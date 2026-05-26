@@ -125,8 +125,9 @@ export const limsTools = {
       if (!rows.length) {
         return JSON.stringify({ error: 'No results found', compound_name, assay_name })
       }
-      const values = rows.map((r: { value: number }) => r.value).filter((v: number) => v !== null)
-      const passes = rows.filter((r: { pass_fail: string }) => r.pass_fail === 'Pass').length
+      const rows2 = rows as { value: number; pass_fail: string }[]
+      const values = rows2.map((r) => r.value).filter((v) => v !== null)
+      const passes = rows2.filter((r) => r.pass_fail === 'Pass').length
       return JSON.stringify({
         compound: compound_name,
         assay: assay_name,

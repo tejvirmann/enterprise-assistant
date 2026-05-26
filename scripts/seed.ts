@@ -123,7 +123,7 @@ async function createTables() {
   `
   await sql`
     CREATE TABLE IF NOT EXISTS rosetta_unit_conversions (
-      id SERIAL PRIMARY KEY, from_unit TEXT, to_unit TEXT, factor REAL, offset REAL
+      id SERIAL PRIMARY KEY, from_unit TEXT, to_unit TEXT, factor REAL, addend REAL
     )
   `
   await sql`
@@ -421,7 +421,7 @@ async function seedRosetta() {
   `
 
   await sql`
-    INSERT INTO rosetta_unit_conversions (from_unit, to_unit, factor, offset) VALUES
+    INSERT INTO rosetta_unit_conversions (from_unit, to_unit, factor, addend) VALUES
     ('mg/mL',    'g/L',      1.0,    0),
     ('g/L',      'mg/mL',    1.0,    0),
     ('EU/mL',    'IU/mL',    10.0,   0),

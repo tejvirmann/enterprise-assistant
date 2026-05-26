@@ -38,11 +38,11 @@ export const rosettaTools = {
       if (!rows.length) {
         return JSON.stringify({ error: `No conversion defined from ${from_unit} to ${to_unit}` })
       }
-      const row = rows[0] as { factor: number; offset: number }
+      const row = rows[0] as { factor: number; addend: number }
       return JSON.stringify({
         input_value: value,
         input_unit: from_unit,
-        output_value: Math.round((value * row.factor + row.offset) * 1e6) / 1e6,
+        output_value: Math.round((value * row.factor + row.addend) * 1e6) / 1e6,
         output_unit: to_unit,
         factor: row.factor,
       })

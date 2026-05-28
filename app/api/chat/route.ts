@@ -6,7 +6,7 @@ import { getToolsForCompany } from '@/tools/index'
 import type { Company, Persona, PersonaModule, CompanyTool } from '@/lib/types'
 
 export async function POST(req: Request) {
-  const { messages, companySlug } = await req.json()
+  const { messages, companySlug, activeToolIds: clientToolIds, activeModuleIds: clientModuleIds } = await req.json()
 
   if (!companySlug) {
     return new Response('companySlug required', { status: 400 })
@@ -27,19 +27,27 @@ export async function POST(req: Request) {
   const personas = await sql`SELECT * FROM personas WHERE id = ${personaId}`
   const persona = personas[0] as Persona
 
-  const modules = await sql`
+  const allModules = await sql`
     SELECT * FROM persona_modules
     WHERE persona_id = ${personaId}
     ORDER BY type, name
   ` as PersonaModule[]
 
-  const companyTools = await sql`
+  const allCompanyTools = await sql`
     SELECT * FROM company_tools
-    WHERE company_id = ${companySlug} AND enabled = true
+    WHERE company_id = ${companySlug}
   ` as CompanyTool[]
 
-  const toolIds = companyTools.map((t) => t.tool_id)
-  const systemPrompt = compileSystemPrompt(company, modules, toolIds)
+  // Use client overrides if provided, otherwise fall back to DB defaults
+  const activeModules = Array.isArray(clientModuleIds)
+    ? allModules.filter((m) => clientModuleIds.includes(m.id))
+    : allModules.filter((m) => m.enabled)
+
+  const toolIds: string[] = Array.isArray(clientToolIds)
+    ? clientToolIds.filter((id: string) => allCompanyTools.some((t) => t.tool_id === id))
+    : allCompanyTools.filter((t) => t.enabled).map((t) => t.tool_id)
+
+  const systemPrompt = compileSystemPrompt(company, activeModules, toolIds)
 
   // When using Open WebUI: MCPs are registered there, don't double-define tools.
   // When using OpenRouter/Ollama: use our TypeScript tool definitions.

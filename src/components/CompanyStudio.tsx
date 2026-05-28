@@ -49,13 +49,13 @@ export function CompanyStudio({ data }: Props) {
         className="flex items-center gap-6 px-7 flex-shrink-0 border-b border-white/5"
         style={{ background: 'var(--indigo)', height: 54 }}
       >
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-white font-bold text-base tracking-tight">{company.name}</span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-white font-bold text-[15px] tracking-tight">{company.name} Demo</span>
           <span
-            className="text-[10px] font-medium tracking-[.12em] uppercase opacity-90"
+            className="text-[10px] font-medium tracking-[.08em] opacity-60"
             style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--teal)' }}
           >
-            agent
+            by MadStack
           </span>
         </div>
 

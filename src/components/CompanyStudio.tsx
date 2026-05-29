@@ -41,41 +41,9 @@ export function CompanyStudio({ data }: Props) {
 
   return (
     <div
-      className="flex flex-col h-screen"
+      className="flex h-full min-h-0"
       style={{ '--brand': company.color } as React.CSSProperties}
     >
-      {/* Nav bar */}
-      <header
-        className="flex items-center gap-6 px-7 flex-shrink-0 border-b border-white/5"
-        style={{ background: 'var(--indigo)', height: 54 }}
-      >
-        <div className="flex flex-col leading-tight">
-          <span className="text-white font-bold text-[15px] tracking-tight">{company.name} Demo</span>
-          <span
-            className="text-[10px] font-medium tracking-[.08em] opacity-60"
-            style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--teal)' }}
-          >
-            by MadStack
-          </span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <span
-            className="text-[10px] font-medium tracking-[.08em] uppercase px-2.5 py-1 rounded-full border"
-            style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              background: 'rgba(54,153,150,.18)',
-              color: 'var(--teal)',
-              borderColor: 'rgba(54,153,150,.35)',
-            }}
-          >
-            Active
-          </span>
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="flex flex-1 min-h-0">
         <ConfigPanel
           company={company}
           persona={persona}
@@ -96,7 +64,6 @@ export function CompanyStudio({ data }: Props) {
             activeModuleIds={activeModuleIds}
           />
         </div>
-      </div>
     </div>
   )
 }

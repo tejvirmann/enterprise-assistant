@@ -134,17 +134,28 @@ async function createTables() {
   await sql`
     CREATE TABLE IF NOT EXISTS companies (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
-      logo_url TEXT, color TEXT DEFAULT '#4f46e5',
-      base_context TEXT, default_persona_id TEXT
+      logo_url TEXT, color TEXT DEFAULT '#369996',
+      brand_config JSONB,
+      base_context TEXT, default_persona_id TEXT,
+      admin_key TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  // Migrations for existing installs
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_config JSONB`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS admin_key TEXT`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+
   await sql`
     CREATE TABLE IF NOT EXISTS personas (
       id TEXT PRIMARY KEY, company_id TEXT REFERENCES companies(id),
       name TEXT NOT NULL, description TEXT,
+      scope TEXT DEFAULT 'private',
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  await sql`ALTER TABLE personas ADD COLUMN IF NOT EXISTS scope TEXT DEFAULT 'private'`
+
   await sql`
     CREATE TABLE IF NOT EXISTS persona_modules (
       id SERIAL PRIMARY KEY, persona_id TEXT REFERENCES personas(id) ON DELETE CASCADE,
@@ -159,11 +170,42 @@ async function createTables() {
     )
   `
   await sql`
+    CREATE TABLE IF NOT EXISTS repos (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
+      repo_url TEXT, branch TEXT DEFAULT 'main', owner TEXT,
+      scope TEXT DEFAULT 'private', verified BOOLEAN DEFAULT false,
+      module_count INTEGER DEFAULT 0, synced_at TIMESTAMPTZ
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS repo_modules (
+      id SERIAL PRIMARY KEY, repo_id TEXT REFERENCES repos(id) ON DELETE CASCADE,
+      path TEXT NOT NULL, type TEXT, name TEXT, description TEXT,
+      tokens INTEGER, content TEXT
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS company_repos (
+      company_id TEXT REFERENCES companies(id),
+      repo_id TEXT REFERENCES repos(id),
+      added_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (company_id, repo_id)
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id TEXT REFERENCES companies(id),
       persona_id TEXT, modules JSONB, tools JSONB,
       system_prompt TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+      role TEXT, content TEXT, parts JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
   console.log('  Tables created.')
@@ -174,7 +216,8 @@ async function createTables() {
 // ---------------------------------------------------------------------------
 
 async function clearData() {
-  await sql`TRUNCATE sessions, company_tools, persona_modules, personas, companies,
+  await sql`TRUNCATE chat_messages, sessions, company_repos, company_tools, repo_modules, repos,
+    persona_modules, personas, companies,
     rosetta_compound_aliases, rosetta_unit_conversions, rosetta_term_map,
     qms_audits, qms_capas, qms_deviations, qms_batches, qms_specifications, qms_products,
     lims_results, lims_samples, lims_assays, lims_instruments, lims_compounds
@@ -496,14 +539,15 @@ const BASE_CONTEXT = `You are an enterprise AI assistant with access to MCP tool
 async function seedCompanies() {
   // Insert company first with no persona, then persona, then link back
   await sql`
-    INSERT INTO companies (id, name, description, color, base_context, default_persona_id) VALUES
+    INSERT INTO companies (id, name, description, color, base_context, default_persona_id, admin_key) VALUES
     (
       'findorff',
       'Findorff',
       'Biologics manufacturing — LIMS, QMS, and Rosetta cross-system intelligence',
       '#2563eb',
       ${BASE_CONTEXT},
-      NULL
+      NULL,
+      'findorff-admin'
     )
   `
 

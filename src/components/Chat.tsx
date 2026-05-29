@@ -1,7 +1,7 @@
 'use client'
 
 import { useChat } from 'ai/react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -26,8 +26,7 @@ function parseThinking(content: string): { thinking: string | null; response: st
   if (content.startsWith('<think>') && closeIdx !== -1) {
     return { thinking: content.slice(7, closeIdx).trim(), response: content.slice(closeIdx + 8).trim() }
   }
-  const open = content.startsWith('<think>')
-  if (open) return { thinking: content.slice(7), response: '' }
+  if (content.startsWith('<think>')) return { thinking: content.slice(7), response: '' }
   return { thinking: null, response: content }
 }
 
@@ -38,11 +37,7 @@ function ThinkingBlock({ text }: { text: string }) {
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors"
-        style={{
-          fontFamily: 'var(--font-mono, monospace)',
-          background: 'var(--teal-softer)',
-          color: 'var(--teal-ink)',
-        }}
+        style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--teal-softer)', color: 'var(--teal-ink)' }}
       >
         <span style={{ color: 'var(--teal)', fontSize: 10 }}>{open ? '▾' : '▸'}</span>
         Thinking…
@@ -61,6 +56,23 @@ function ThinkingBlock({ text }: { text: string }) {
 }
 
 const mdComponents = {
+  // pre wraps ALL block code — set container styles here
+  pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) => (
+    <pre
+      className="my-2 overflow-x-auto rounded-lg text-xs leading-relaxed"
+      style={{
+        fontFamily: 'var(--font-mono, monospace)',
+        background: 'var(--surface-2)',
+        color: 'var(--ink-2)',
+        border: '1px solid var(--border)',
+        padding: '0.75rem',
+        whiteSpace: 'pre',
+      }}
+      {...props}
+    >
+      {children}
+    </pre>
+  ),
   table: (props: React.HTMLAttributes<HTMLTableElement>) => (
     <div className="overflow-x-auto my-3">
       <table className="w-full text-sm border-collapse" style={{ borderColor: 'var(--border)' }} {...props} />
@@ -72,12 +84,7 @@ const mdComponents = {
   th: (props: React.ThHTMLAttributes<HTMLTableHeaderCellElement>) => (
     <th
       className="px-3 py-2 text-left text-xs font-semibold border"
-      style={{
-        fontFamily: 'var(--font-mono, monospace)',
-        color: 'var(--ink-2)',
-        borderColor: 'var(--border)',
-        letterSpacing: '.04em',
-      }}
+      style={{ color: 'var(--ink-2)', borderColor: 'var(--border)', letterSpacing: '.04em' }}
       {...props}
     />
   ),
@@ -98,21 +105,13 @@ const mdComponents = {
     />
   ),
   code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) => {
-    const isBlock = className?.includes('language-')
-    return isBlock ? (
-      <code
-        className={`block p-3 rounded-lg text-xs leading-relaxed overflow-x-auto my-2 ${className}`}
-        style={{
-          fontFamily: 'var(--font-mono, monospace)',
-          background: 'var(--surface-2)',
-          color: 'var(--ink-2)',
-          border: '1px solid var(--border)',
-        }}
-        {...props}
-      >
-        {children}
-      </code>
-    ) : (
+    // Block code (inside <pre>): pass through without extra styling — pre handles it.
+    // Inline code: no newlines, no language class.
+    const isBlock = !!className || String(children ?? '').includes('\n')
+    if (isBlock) {
+      return <code className={className ?? ''} {...props}>{children}</code>
+    }
+    return (
       <code
         className="px-1.5 py-0.5 rounded text-xs"
         style={{
@@ -156,24 +155,75 @@ const mdComponents = {
 }
 
 export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, suggestions, welcomeMessage }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [atBottom, setAtBottom] = useState(true)
+  // Stores a steered message to send after current generation stops
+  const pendingSteerRef = useRef<string | null>(null)
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, stop, append } = useChat({
     api: '/api/chat',
     body: { companySlug, activeToolIds, activeModuleIds },
     maxSteps: 8,
   })
 
+  // ESC stops generation
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isLoading) stop()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isLoading, stop])
+
+  // When generation stops, fire any queued steer message
+  useEffect(() => {
+    if (!isLoading && pendingSteerRef.current) {
+      const text = pendingSteerRef.current
+      pendingSteerRef.current = null
+      setAtBottom(true)
+      append({ role: 'user', content: text })
+    }
+  }, [isLoading, append])
+
+  // Track whether the user is near the bottom of the scroll container
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+    setAtBottom(dist < 100)
+  }, [])
+
+  // Instant scroll to bottom during streaming (smooth causes animation pile-up jank)
+  useEffect(() => {
+    if (!atBottom) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages, atBottom])
+
+  const onSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim()) return
+    if (isLoading) {
+      // Steer: stop current run, queue message to send once stopped
+      pendingSteerRef.current = input
+      setInput('')
+      stop()
+      return
+    }
+    setAtBottom(true)
+    handleSubmit(e)
+  }, [input, isLoading, stop, handleSubmit, setInput])
 
   const activeSuggestions = suggestions ?? DEFAULT_SUGGESTIONS
 
   return (
-    <div className="flex flex-col h-full min-h-0" style={{ background: 'var(--bg)' }}>
+    <div className="flex flex-col h-full min-h-0 relative" style={{ background: 'var(--bg)' }}>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 max-w-4xl mx-auto w-full">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-8 py-6 space-y-6 max-w-4xl mx-auto w-full"
+      >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-5 pb-12">
             <p className="text-sm" style={{ color: 'var(--ink-4)' }}>
@@ -210,7 +260,6 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             )
           }
 
-          // Tool calls
           const toolParts = m.parts?.filter((p) => p.type === 'tool-invocation') ?? []
           const textContent = m.parts
             ?.filter((p) => p.type === 'text')
@@ -221,7 +270,6 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
 
           return (
             <div key={m.id} className="space-y-1 pl-6">
-              {/* Tool invocations */}
               {toolParts.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {toolParts.map((part, i) => {
@@ -244,10 +292,8 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
                 </div>
               )}
 
-              {/* Thinking block */}
               {thinking && <ThinkingBlock text={thinking} />}
 
-              {/* Response body */}
               {response && (
                 <div className="prose-sm max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents as never}>
@@ -259,7 +305,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
           )
         })}
 
-        {isLoading && (
+        {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
           <div className="pl-6 flex items-center gap-2">
             <div className="flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0ms]" style={{ background: 'var(--ink-4)' }} />
@@ -268,15 +314,30 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
+        <div className="h-2" />
       </div>
 
-      {/* Input */}
+      {/* Jump-to-latest button — appears when user has scrolled up */}
+      {!atBottom && (
+        <button
+          onClick={() => {
+            setAtBottom(true)
+            const el = scrollRef.current
+            if (el) el.scrollTop = el.scrollHeight
+          }}
+          className="absolute bottom-[72px] right-8 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border shadow-md transition-all z-10"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--ink-3)' }}
+        >
+          ↓ Latest
+        </button>
+      )}
+
+      {/* Input bar */}
       <div
         className="flex-shrink-0 border-t px-8 py-4 max-w-4xl mx-auto w-full"
         style={{ borderColor: 'var(--border)' }}
       >
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
+        <form onSubmit={onSubmit} className="flex items-center gap-3">
           <span
             className="text-sm font-semibold flex-shrink-0 select-none"
             style={{ color: brandColor, fontFamily: 'var(--font-mono, monospace)' }}
@@ -286,19 +347,40 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
           <input
             value={input}
             onChange={handleInputChange}
-            placeholder="Ask anything…"
+            placeholder={isLoading ? 'Type to steer, or ESC to stop…' : 'Ask anything…'}
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--ink)', caretColor: brandColor }}
           />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-4 py-1.5 rounded-full text-xs font-semibold text-white disabled:opacity-40 transition-opacity hover:opacity-90 flex-shrink-0"
-            style={{ background: brandColor }}
-          >
-            Send
-          </button>
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={() => stop()}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 transition-opacity hover:opacity-80"
+              style={{
+                background: 'rgba(220,38,38,.08)',
+                color: '#dc2626',
+                border: '1px solid rgba(220,38,38,.25)',
+              }}
+            >
+              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: '#dc2626' }} />
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="px-4 py-1.5 rounded-full text-xs font-semibold text-white disabled:opacity-40 transition-opacity hover:opacity-90 flex-shrink-0"
+              style={{ background: brandColor }}
+            >
+              Send
+            </button>
+          )}
         </form>
+        {isLoading && input.trim() && (
+          <p className="mt-1 text-[10px]" style={{ color: 'var(--ink-4)', fontFamily: 'var(--font-mono, monospace)' }}>
+            ↵ send to stop & steer
+          </p>
+        )}
         <div className="mt-1.5 h-px" style={{ background: 'var(--border)' }} />
       </div>
     </div>

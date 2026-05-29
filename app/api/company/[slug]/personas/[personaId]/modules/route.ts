@@ -64,3 +64,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ slug:
   `
   return Response.json({ ok: true })
 }
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string; personaId: string }> }) {
+  const { slug, personaId } = await params
+  const { moduleId, name, description, content, tokens, adminKey } = await req.json()
+
+  const valid = await validateAdminKey(slug, adminKey)
+  const denied = requireKey(valid)
+  if (denied) return denied
+
+  await sql`
+    UPDATE persona_modules SET
+      name        = COALESCE(${name ?? null}, name),
+      description = COALESCE(${description ?? null}, description),
+      content     = ${content ?? null},
+      tokens      = COALESCE(${tokens ?? null}, tokens)
+    WHERE id = ${moduleId} AND persona_id = ${personaId}
+  `
+  return Response.json({ ok: true })
+}

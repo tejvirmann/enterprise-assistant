@@ -1,3 +1,5 @@
+export type { BrandConfig } from './theme'
+
 export interface Company {
   id: string
   name: string
@@ -29,11 +31,51 @@ export interface PersonaModule {
   content: string | null
 }
 
+export interface Repo {
+  id: string
+  name: string
+  description: string | null
+  repo_url: string | null
+  owner: string | null
+  scope: string
+  verified: boolean
+  module_count: number
+}
+
+export interface RepoModule {
+  id: number
+  repo_id: string
+  path: string
+  type: string
+  name: string
+  description: string | null
+  tokens: number | null
+  content: string | null
+}
+
 export interface CompanyTool {
   id: number
   company_id: string
   tool_id: string
   enabled: boolean
+}
+
+export interface McpServerTool {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+export interface McpServer {
+  id: number
+  company_id: string
+  name: string
+  url: string
+  transport: string
+  enabled: boolean
+  tools: McpServerTool[]
+  last_scanned: string | null
+  created_at: string
 }
 
 export interface CompanyData {

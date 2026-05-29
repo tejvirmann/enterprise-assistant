@@ -1,0 +1,10 @@
+<svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon: orange square with stacked-layers mark -->
+  <rect width="32" height="32" fill="#f97316"/>
+  <path d="M16 4L6 9.5v11L16 26l10-5.5v-11L16 4z" stroke="white" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+  <path d="M6 15.5l10 5.5 10-5.5" stroke="white" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+
+  <!-- Wordmark: "MadStack" bold dark + " AI" light gray -->
+  <text x="42" y="21" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="600" fill="#111827" letter-spacing="-0.3">MadStack</text>
+  <text x="110" y="21" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="400" fill="#9ca3af" letter-spacing="-0.3"> AI</text>
+</svg>

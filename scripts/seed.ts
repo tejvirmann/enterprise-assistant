@@ -134,17 +134,28 @@ async function createTables() {
   await sql`
     CREATE TABLE IF NOT EXISTS companies (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
-      logo_url TEXT, color TEXT DEFAULT '#4f46e5',
-      base_context TEXT, default_persona_id TEXT
+      logo_url TEXT, color TEXT DEFAULT '#369996',
+      brand_config JSONB,
+      base_context TEXT, default_persona_id TEXT,
+      admin_key TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  // Migrations for existing installs
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS brand_config JSONB`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS admin_key TEXT`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+
   await sql`
     CREATE TABLE IF NOT EXISTS personas (
       id TEXT PRIMARY KEY, company_id TEXT REFERENCES companies(id),
       name TEXT NOT NULL, description TEXT,
+      scope TEXT DEFAULT 'private',
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  await sql`ALTER TABLE personas ADD COLUMN IF NOT EXISTS scope TEXT DEFAULT 'private'`
+
   await sql`
     CREATE TABLE IF NOT EXISTS persona_modules (
       id SERIAL PRIMARY KEY, persona_id TEXT REFERENCES personas(id) ON DELETE CASCADE,
@@ -159,11 +170,55 @@ async function createTables() {
     )
   `
   await sql`
+    CREATE TABLE IF NOT EXISTS repos (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
+      repo_url TEXT, branch TEXT DEFAULT 'main', owner TEXT,
+      scope TEXT DEFAULT 'private', verified BOOLEAN DEFAULT false,
+      module_count INTEGER DEFAULT 0, synced_at TIMESTAMPTZ
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS repo_modules (
+      id SERIAL PRIMARY KEY, repo_id TEXT REFERENCES repos(id) ON DELETE CASCADE,
+      path TEXT NOT NULL, type TEXT, name TEXT, description TEXT,
+      tokens INTEGER, content TEXT
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS company_repos (
+      company_id TEXT REFERENCES companies(id),
+      repo_id TEXT REFERENCES repos(id),
+      added_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (company_id, repo_id)
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS company_mcp_servers (
+      id SERIAL PRIMARY KEY,
+      company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      transport TEXT DEFAULT 'http',
+      enabled BOOLEAN DEFAULT true,
+      tools JSONB DEFAULT '[]',
+      last_scanned TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id TEXT REFERENCES companies(id),
       persona_id TEXT, modules JSONB, tools JSONB,
       system_prompt TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+      role TEXT, content TEXT, parts JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
   console.log('  Tables created.')
@@ -174,7 +229,8 @@ async function createTables() {
 // ---------------------------------------------------------------------------
 
 async function clearData() {
-  await sql`TRUNCATE sessions, company_tools, persona_modules, personas, companies,
+  await sql`TRUNCATE chat_messages, sessions, company_repos, company_tools, repo_modules, repos,
+    persona_modules, personas, companies,
     rosetta_compound_aliases, rosetta_unit_conversions, rosetta_term_map,
     qms_audits, qms_capas, qms_deviations, qms_batches, qms_specifications, qms_products,
     lims_results, lims_samples, lims_assays, lims_instruments, lims_compounds
@@ -493,17 +549,159 @@ const BASE_CONTEXT = `You are an enterprise AI assistant with access to MCP tool
 - You do not make regulatory decisions. You surface information; the human decides.
 - You do not fabricate data. If a query returns no results, say so.`
 
+const BLUEPRINT_BATCH_RELEASE_CONTENT = `Follow these steps when the user asks about batch release readiness:
+
+**Step 1 — Get batch record from QMS**
+Use qms_get_batch or qms_check_batch_release to retrieve the batch record, current status, and any open deviations.
+
+**Step 2 — Get specifications**
+Use qms_get_specifications for the product to know the acceptance limits for each parameter.
+
+**Step 3 — Pull release testing results from LIMS**
+Use lims_search_samples to find the drug product/drug substance sample for this lot, then lims_get_assay_results for all assays.
+
+**Step 4 — Compare results against specifications**
+For each specification parameter, find the corresponding LIMS result. Use rosetta_normalize_term to match parameter names across systems. Flag any result that is OOS or missing.
+
+**Step 5 — Render a release decision table**
+
+| Parameter | Specification | Result | Unit | Status |
+|---|---|---|---|---|
+| HPLC Purity | ≥ 97.0% | 98.4% | % | PASS |
+| Endotoxin | ≤ 0.5 EU/mL | 0.12 | EU/mL | PASS |
+
+**Step 6 — Go/No-Go recommendation**
+State clearly: RELEASE RECOMMENDED or RELEASE BLOCKED, with reasons.
+If blocked, list: open deviations, OOS results, or missing data.`
+
+const DEVIATION_INVESTIGATION_CONTENT = `Follow these steps when the user asks to investigate a deviation, OOS result, or batch quality event:
+
+**Step 1 — Find the deviation in QMS**
+Use qms_get_deviations to retrieve the full deviation record including description, severity, root cause, and status.
+
+**Step 2 — Identify affected batches and products**
+Note the lot number, product, and manufacture date from the deviation record.
+
+**Step 3 — Pull LIMS results for affected samples**
+Use lims_search_samples to find samples corresponding to the affected lot, then lims_get_assay_results to retrieve all analytical results. Flag any failures.
+
+**Step 4 — Normalize terminology via Rosetta**
+Use rosetta_normalize_term to map QMS deviation terms and LIMS result statuses to canonical forms. Use rosetta_standardize_status to align pass/fail designations across systems.
+
+**Step 5 — Check open CAPAs**
+Use qms_get_open_capas to surface any corrective actions linked to this deviation. Flag overdue CAPAs.
+
+**Step 6 — Synthesize**
+Present a structured investigation summary:
+- Deviation number, severity, description, root cause
+- Affected lot(s) and product
+- Analytical results table (all assays, pass/fail highlighted)
+- Open CAPAs with owner and due date
+- Risk assessment: is this batch releasable? Are there systemic patterns?`
+
+// ── Demo (root default) ──────────────────────────────────────────────────────
+
+const DEMO_BASE_CONTEXT = `You are AgentOS — a context-aware enterprise AI assistant. You have access to live data tools and pre-loaded skill modules. You reason step by step, cite your sources, and present results as structured tables.
+
+## Core behavior
+- Query tools before answering data questions. Never fabricate values.
+- When a question spans multiple systems, query all relevant tools and reconcile results.
+- Flag anomalies, risks, and items requiring attention prominently.
+- Be concise in prose but complete in data.`
+
+const DEMO_SKILL_OVERVIEW = `When the user asks what tools or context you have loaded:
+
+1. List each active skill/blueprint by name and one-sentence description.
+2. List each active MCP tool server and the number of tools available.
+3. Show estimated token budget consumed vs available.
+4. Offer to demonstrate any capability with a sample query.
+
+Keep the response structured and scannable.`
+
+// ── Lattice (Biologics Manufacturing — mirrors lattice-poc exactly) ──────────
+
+const LATTICE_BASE_CONTEXT = `You are Lattice, a federated intelligence system for biologics manufacturing.
+
+You connect process data across systems to support tech transfer, deviation investigations, batch release decisions, and cross-site comparisons. You have access to MCP tools that query local data systems — LIMS, QMS, and Rosetta for cross-system normalization.
+
+## How you work
+
+- Use MCP tools to query the data systems directly. Never guess at data values.
+- When a question spans multiple systems (e.g. LIMS results + QMS deviations), query both and use Rosetta to normalize terminology and units before comparing.
+- Always show your sources: which system you queried, what filters you applied, how many records were returned.
+- Present results as structured tables where possible. Use clear column headers.
+- Flag anything that looks like a risk: open deviations, failed results, overdue CAPAs, OOS trends.
+- Be concise in your reasoning but thorough in the data. The people using you are scientists and quality professionals — they want the data, not a summary of the data.
+
+## What you do not do
+
+- You do not write to any system. All tools are read-only.
+- You do not make regulatory decisions. You surface information; the human decides.
+- You do not fabricate data. If a query returns no results, say so.`
+
+// ── Lancaster Investments (Financial Services) ───────────────────────────────
+
+const LANCASTER_BASE_CONTEXT = `You are the Lancaster Portfolio Intelligence Assistant — an AI analyst for portfolio monitoring, investment research, and risk management.
+
+## How you work
+- Analyze portfolio exposure, performance attribution, and risk concentration using structured data.
+- Always present figures with units, as-of dates, and comparison benchmarks.
+- When discussing performance, show absolute return AND benchmark-relative return.
+- Be precise about time horizons: MTD, QTD, YTD, 1Y, 3Y, inception.
+
+## What you do not do
+- You do not provide investment advice or buy/sell recommendations to external parties.
+- You do not guarantee forward-looking projections.
+- You do not share client-level data in aggregate reports without anonymization.`
+
+const LANCASTER_PORTFOLIO_SKILL = `When asked about portfolio performance or returns:
+
+1. Pull total portfolio return for the requested period. Compare to relevant benchmark (S&P 500, Russell 2000, MSCI ACWI, custom).
+2. Break down attribution: asset class → sector → individual position.
+3. Identify top 5 contributors and top 5 detractors by absolute P&L.
+4. Show allocation drift vs target: current weight vs IPS target for each asset class.
+5. Flag any position exceeding concentration limits (typically >5% single name, >25% single sector).
+
+Table format: Position | Weight | Return | Contribution | vs Benchmark | Limit Status`
+
+const LANCASTER_RISK_SKILL = `When asked about risk, drawdown, or volatility:
+
+1. Calculate portfolio volatility (annualized std dev) vs benchmark and prior period.
+2. Show max drawdown for trailing 12 months: peak date, trough date, recovery status.
+3. Compute Value at Risk (VaR) at 95% and 99% confidence intervals (1-day and 10-day).
+4. Break down beta exposure by sector and asset class.
+5. Identify correlated positions (r > 0.85) that create hidden concentration risk.
+
+Risk thresholds: Flag if portfolio VaR (95%, 1-day) exceeds 1.5% of NAV. Flag if any single sector beta > 1.4.`
+
+const LANCASTER_COMPLIANCE_SKILL = `When asked about compliance, limits, or investment policy:
+
+1. Check all current positions against IPS constraints: sector limits, single-name limits, geographic limits, credit quality floors.
+2. Report any soft or hard limit breaches. Distinguish between temporary drift and structural breach.
+3. Show restricted securities list and flag any current holdings that appear on it.
+4. Summarize upcoming covenant dates, client reporting deadlines, and rebalancing windows.
+5. Check liquidity: what % of the portfolio can be liquidated within 1 day, 5 days, 30 days at current market depth.
+
+Always include an "Action Required" column: Breach | Severity | Deadline | Owner.`
+
 async function seedCompanies() {
+  const FINDORFF_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Findorff QC Agent ready. Query LIMS and QMS data.' })
+  const DEMO_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'AgentOS ready. What would you like to explore?', logo_url: '/madstack-icon.svg' })
+  const LATTICE_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lattice ready. Query LIMS, QMS, and Rosetta.' })
+  const LANCASTER_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lancaster Portfolio Intelligence ready.', bg: '#f0fdf4', surface: '#ffffff', border: '#bbf7d0' })
+
   // Insert company first with no persona, then persona, then link back
   await sql`
-    INSERT INTO companies (id, name, description, color, base_context, default_persona_id) VALUES
+    INSERT INTO companies (id, name, description, color, brand_config, base_context, default_persona_id, admin_key) VALUES
     (
       'findorff',
       'Findorff',
       'Biologics manufacturing — LIMS, QMS, and Rosetta cross-system intelligence',
       '#2563eb',
+      ${FINDORFF_BRAND}::jsonb,
       ${BASE_CONTEXT},
-      NULL
+      NULL,
+      'findorff-admin'
     )
   `
 
@@ -547,7 +745,130 @@ async function seedCompanies() {
     `
   }
 
-  console.log('  Companies: findorff with QC Analyst persona, 2 skills, 19 tools')
+  // Seed repos
+  await sql`
+    INSERT INTO repos (id, name, description, owner, scope, verified, module_count) VALUES
+    (
+      'findorff-skills',
+      'Findorff Skills & Blueprints',
+      'QC Analyst skills and investigation blueprints for Findorff biologics manufacturing',
+      'MadStack',
+      'private',
+      true,
+      4
+    )
+  `
+
+  await sql`
+    INSERT INTO repo_modules (repo_id, path, type, name, description, tokens, content) VALUES
+    (
+      'findorff-skills', 'skills/lims-analysis.md', 'skill', 'LIMS Analysis',
+      'Analytical result querying, OOS trend detection, cross-batch comparisons', 400,
+      ${LIMS_SKILL_CONTENT}
+    ),
+    (
+      'findorff-skills', 'skills/qms-investigation.md', 'skill', 'QMS Investigation',
+      'Deviation tracking, CAPA status, batch release, audit findings', 450,
+      ${QMS_SKILL_CONTENT}
+    ),
+    (
+      'findorff-skills', 'blueprints/batch-release.md', 'blueprint', 'Batch Release',
+      'Aggregate release testing results and QMS status into a go/no-go summary', 550,
+      ${BLUEPRINT_BATCH_RELEASE_CONTENT}
+    ),
+    (
+      'findorff-skills', 'blueprints/deviation-investigation.md', 'blueprint', 'Deviation Investigation',
+      'Cross-system investigation linking QMS deviation to LIMS analytical data', 600,
+      ${DEVIATION_INVESTIGATION_CONTENT}
+    )
+  `
+
+  await sql`
+    INSERT INTO company_repos (company_id, repo_id) VALUES ('findorff', 'findorff-skills')
+  `
+
+  // ── Demo company (root default) ──────────────────────────────────────────
+  await sql`
+    INSERT INTO companies (id, name, description, color, brand_config, base_context, admin_key) VALUES
+    ('demo', 'AgentOS', 'General-purpose enterprise AI assistant demo', '#f97316', ${DEMO_BRAND}::jsonb, ${DEMO_BASE_CONTEXT}, 'demo-admin')
+  `
+  await sql`
+    INSERT INTO personas (id, company_id, name, description) VALUES
+    ('demo-default', 'demo', 'Enterprise Assistant', 'General-purpose analyst with access to all available tools and context')
+  `
+  await sql`UPDATE companies SET default_persona_id = 'demo-default' WHERE id = 'demo'`
+  await sql`
+    INSERT INTO persona_modules (persona_id, type, name, description, tokens, enabled, content) VALUES
+    ('demo-default', 'skill', 'Capability Overview', 'How to summarize loaded skills, tools, and context', 150, true, ${DEMO_SKILL_OVERVIEW}),
+    ('demo-default', 'skill', 'LIMS Analysis', 'Analytical result querying, OOS trend detection, cross-batch comparisons', 400, true, ${LIMS_SKILL_CONTENT}),
+    ('demo-default', 'skill', 'QMS Investigation', 'Deviation tracking, CAPA status, batch release, audit findings', 450, true, ${QMS_SKILL_CONTENT})
+  `
+  for (const toolId of [
+    'lims_list_compounds', 'lims_search_samples', 'lims_get_assay_results',
+    'lims_get_oos_results', 'lims_get_instrument_status', 'lims_compare_compound_results',
+    'qms_list_products', 'qms_get_batch', 'qms_list_batches', 'qms_get_deviations',
+    'qms_get_open_capas', 'qms_get_specifications', 'qms_check_batch_release', 'qms_get_audit_findings',
+    'rosetta_normalize_term', 'rosetta_convert_units', 'rosetta_resolve_compound',
+    'rosetta_list_term_mappings', 'rosetta_standardize_status',
+  ]) {
+    await sql`INSERT INTO company_tools (company_id, tool_id, enabled) VALUES ('demo', ${toolId}, true)`
+  }
+
+  // ── Lattice (Biologics manufacturing — mirrors lattice-poc) ─────────────
+  await sql`
+    INSERT INTO companies (id, name, description, color, brand_config, base_context, admin_key) VALUES
+    ('lattice', 'Lattice', 'Federated intelligence for biologics manufacturing — LIMS, QMS, and Rosetta', '#212154', ${LATTICE_BRAND}::jsonb, ${LATTICE_BASE_CONTEXT}, 'lattice-admin')
+  `
+  await sql`
+    INSERT INTO personas (id, company_id, name, description) VALUES
+    ('lattice-analyst', 'lattice', 'QC Analyst', 'Quality control analyst with full LIMS, QMS, and Rosetta access')
+  `
+  await sql`UPDATE companies SET default_persona_id = 'lattice-analyst' WHERE id = 'lattice'`
+  await sql`
+    INSERT INTO persona_modules (persona_id, type, name, description, tokens, enabled, content) VALUES
+    ('lattice-analyst', 'skill', 'LIMS Analysis', 'Analytical result querying, OOS trend detection, cross-batch comparisons', 400, true, ${LIMS_SKILL_CONTENT}),
+    ('lattice-analyst', 'skill', 'QMS Investigation', 'Deviation tracking, CAPA status, batch release, audit findings', 450, true, ${QMS_SKILL_CONTENT}),
+    ('lattice-analyst', 'blueprint', 'Batch Release', 'Aggregate release testing results and QMS status into a go/no-go summary', 550, true, ${BLUEPRINT_BATCH_RELEASE_CONTENT}),
+    ('lattice-analyst', 'blueprint', 'Deviation Investigation', 'Cross-system investigation linking QMS deviation to LIMS analytical data', 600, true, ${DEVIATION_INVESTIGATION_CONTENT})
+  `
+  // Lattice: all tools enabled (same as findorff — this is the direct lattice-poc port)
+  for (const toolId of [
+    'lims_list_compounds', 'lims_search_samples', 'lims_get_assay_results',
+    'lims_get_oos_results', 'lims_get_instrument_status', 'lims_compare_compound_results',
+    'qms_list_products', 'qms_get_batch', 'qms_list_batches', 'qms_get_deviations',
+    'qms_get_open_capas', 'qms_get_specifications', 'qms_check_batch_release', 'qms_get_audit_findings',
+    'rosetta_normalize_term', 'rosetta_convert_units', 'rosetta_resolve_compound',
+    'rosetta_list_term_mappings', 'rosetta_standardize_status',
+  ]) {
+    await sql`INSERT INTO company_tools (company_id, tool_id, enabled) VALUES ('lattice', ${toolId}, true)`
+  }
+  // Link lattice to the findorff-skills repo (same skill content)
+  await sql`INSERT INTO company_repos (company_id, repo_id) VALUES ('lattice', 'findorff-skills') ON CONFLICT DO NOTHING`
+
+  // ── Lancaster Investments ─────────────────────────────────────────────────
+  await sql`
+    INSERT INTO companies (id, name, description, color, brand_config, base_context, admin_key) VALUES
+    ('lancaster-investments', 'Lancaster', 'Investment portfolio monitoring, risk analysis, and compliance intelligence', '#166534', ${LANCASTER_BRAND}::jsonb, ${LANCASTER_BASE_CONTEXT}, 'lancaster-admin')
+  `
+  await sql`
+    INSERT INTO personas (id, company_id, name, description) VALUES
+    ('lancaster-portfolio', 'lancaster-investments', 'Portfolio Analyst', 'Investment analyst — performance attribution, risk monitoring, compliance checks')
+  `
+  await sql`UPDATE companies SET default_persona_id = 'lancaster-portfolio' WHERE id = 'lancaster-investments'`
+  await sql`
+    INSERT INTO persona_modules (persona_id, type, name, description, tokens, enabled, content) VALUES
+    ('lancaster-portfolio', 'skill', 'Portfolio Performance', 'Return attribution, contributor/detractor analysis, benchmark comparison', 430, true, ${LANCASTER_PORTFOLIO_SKILL}),
+    ('lancaster-portfolio', 'skill', 'Risk & Volatility', 'VaR, drawdown analysis, beta exposure, correlation risk', 450, true, ${LANCASTER_RISK_SKILL}),
+    ('lancaster-portfolio', 'blueprint', 'Compliance Review', 'IPS limit checks, breach tracking, liquidity analysis', 480, true, ${LANCASTER_COMPLIANCE_SKILL})
+  `
+  // Lancaster uses Rosetta for normalizing financial terminology across data sources
+  for (const toolId of [
+    'rosetta_normalize_term', 'rosetta_convert_units', 'rosetta_resolve_compound',
+  ]) {
+    await sql`INSERT INTO company_tools (company_id, tool_id, enabled) VALUES ('lancaster-investments', ${toolId}, true)`
+  }
+
+  console.log('  Companies: findorff, demo, lattice, lancaster-investments seeded')
 }
 
 // ---------------------------------------------------------------------------

@@ -7,9 +7,10 @@ import type { CompanyData } from '@/lib/types'
 
 interface Props {
   data: CompanyData
+  chatWelcome?: string
 }
 
-export function CompanyStudio({ data }: Props) {
+export function CompanyStudio({ data, chatWelcome }: Props) {
   const { company, persona, modules, tools } = data
 
   const [activeModuleIds, setActiveModuleIds] = useState<number[]>(
@@ -19,6 +20,7 @@ export function CompanyStudio({ data }: Props) {
     tools.filter((t) => t.enabled).map((t) => t.tool_id)
   )
   const [chatKey, setChatKey] = useState(0)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const toggleModule = useCallback((id: number) => {
     setActiveModuleIds((prev) =>
@@ -40,42 +42,8 @@ export function CompanyStudio({ data }: Props) {
   const relaunch = useCallback(() => setChatKey((k) => k + 1), [])
 
   return (
-    <div
-      className="flex flex-col h-screen"
-      style={{ '--brand': company.color } as React.CSSProperties}
-    >
-      {/* Nav bar */}
-      <header
-        className="flex items-center gap-6 px-7 flex-shrink-0 border-b border-white/5"
-        style={{ background: 'var(--indigo)', height: 54 }}
-      >
-        <div className="flex flex-col leading-tight">
-          <span className="text-white font-bold text-[15px] tracking-tight">{company.name} Demo</span>
-          <span
-            className="text-[10px] font-medium tracking-[.08em] opacity-60"
-            style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--teal)' }}
-          >
-            by MadStack
-          </span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <span
-            className="text-[10px] font-medium tracking-[.08em] uppercase px-2.5 py-1 rounded-full border"
-            style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              background: 'rgba(54,153,150,.18)',
-              color: 'var(--teal)',
-              borderColor: 'rgba(54,153,150,.35)',
-            }}
-          >
-            Active
-          </span>
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="flex flex-1 min-h-0">
+    <div className="flex h-full min-h-0">
+      {sidebarOpen && (
         <ConfigPanel
           company={company}
           persona={persona}
@@ -86,16 +54,28 @@ export function CompanyStudio({ data }: Props) {
           onToggleModule={toggleModule}
           onToggleServer={toggleServer}
           onRelaunch={relaunch}
+          onCollapse={() => setSidebarOpen(false)}
         />
-        <div className="flex-1 min-w-0" style={{ background: 'var(--bg)' }}>
-          <Chat
-            key={chatKey}
-            companySlug={company.id}
-            brandColor={company.color}
-            activeToolIds={activeToolIds}
-            activeModuleIds={activeModuleIds}
-          />
-        </div>
+      )}
+      <div className="flex-1 min-w-0 relative" style={{ background: 'var(--bg)' }}>
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--ink-3)' }}
+            title="Show panel"
+          >
+            <span style={{ fontSize: 10 }}>▶</span> Panel
+          </button>
+        )}
+        <Chat
+          key={chatKey}
+          companySlug={company.id}
+          brandColor={company.color}
+          activeToolIds={activeToolIds}
+          activeModuleIds={activeModuleIds}
+          welcomeMessage={chatWelcome}
+        />
       </div>
     </div>
   )

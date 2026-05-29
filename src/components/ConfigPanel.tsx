@@ -55,12 +55,13 @@ interface Props {
   onToggleModule: (id: number) => void
   onToggleServer: (prefix: string) => void
   onRelaunch: () => void
+  onCollapse: () => void
 }
 
 export function ConfigPanel({
   company, persona, modules, tools,
   activeModuleIds, activeToolIds,
-  onToggleModule, onToggleServer, onRelaunch,
+  onToggleModule, onToggleServer, onRelaunch, onCollapse,
 }: Props) {
   const tokenTotal = modules
     .filter((m) => activeModuleIds.includes(m.id) && m.tokens)
@@ -88,15 +89,30 @@ export function ConfigPanel({
         className="px-5 py-4 flex-shrink-0 border-b"
         style={{ borderColor: 'var(--border)', borderLeftWidth: 3, borderLeftColor: 'var(--brand)' }}
       >
-        <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{persona.name}</div>
-        {persona.description && (
-          <div className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>{persona.description}</div>
-        )}
-        <div
-          className="text-[10px] mt-1.5 tracking-[.04em]"
-          style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}
-        >
-          {company.name} · {activeModuleIds.length} modules · {activeToolIds.length} tools
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{persona.name}</div>
+            {persona.description && (
+              <div className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>{persona.description}</div>
+            )}
+            <div
+              className="text-[10px] mt-1.5 tracking-[.04em]"
+              style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}
+            >
+              {company.name} · {activeModuleIds.length} mod · {activeToolIds.length} tools
+            </div>
+            <div className="mt-1.5 text-[9px] px-1.5 py-0.5 rounded w-fit tracking-[.08em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', background: 'rgba(255,255,255,.6)', color: 'var(--ink-4)' }}>
+              Session config — temporary
+            </div>
+          </div>
+          <button
+            onClick={onCollapse}
+            className="flex-shrink-0 text-xs px-2 py-1 rounded-lg border transition-colors mt-0.5"
+            style={{ borderColor: 'var(--border)', color: 'var(--ink-4)', background: 'transparent' }}
+            title="Collapse panel"
+          >
+            ◀
+          </button>
         </div>
       </div>
 
@@ -105,7 +121,7 @@ export function ConfigPanel({
 
         {/* 01 Context Modules */}
         <div>
-          <StepLabel n="01">Context Modules</StepLabel>
+          <StepLabel n="01">Context</StepLabel>
           <div className="space-y-2">
             {modules.map((m) => {
               const active = activeModuleIds.includes(m.id)
@@ -242,7 +258,7 @@ export function ConfigPanel({
             className="w-full py-2.5 rounded-full text-sm font-semibold text-white tracking-[.01em] transition-opacity hover:opacity-90"
             style={{ background: 'var(--brand)' }}
           >
-            Relaunch Agent →
+            New Session →
           </button>
         </div>
       </div>

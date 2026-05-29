@@ -1,9 +1,7 @@
-export const dynamic = 'force-dynamic'
-
 import { notFound } from 'next/navigation'
 import { sql } from '@/lib/db'
 import { CompanyStudio } from '@/components/CompanyStudio'
-import type { Company, Persona, PersonaModule, CompanyTool } from '@/lib/types'
+import type { Company, Persona, PersonaModule, CompanyTool, BrandConfig } from '@/lib/types'
 
 interface Props {
   params: Promise<{ company: string }>
@@ -45,7 +43,8 @@ export default async function CompanyPage({ params }: Props) {
 
   if (!data) notFound()
 
-  return <CompanyStudio data={data} />
+  const cfg = ((data.company as Company & { brand_config?: BrandConfig }).brand_config ?? {}) as BrandConfig
+  return <CompanyStudio data={data} chatWelcome={cfg.chat_welcome} />
 }
 
 export async function generateMetadata({ params }: Props) {

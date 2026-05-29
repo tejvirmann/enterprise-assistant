@@ -193,6 +193,19 @@ async function createTables() {
     )
   `
   await sql`
+    CREATE TABLE IF NOT EXISTS company_mcp_servers (
+      id SERIAL PRIMARY KEY,
+      company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      transport TEXT DEFAULT 'http',
+      enabled BOOLEAN DEFAULT true,
+      tools JSONB DEFAULT '[]',
+      last_scanned TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id TEXT REFERENCES companies(id),
@@ -673,7 +686,7 @@ Always include an "Action Required" column: Breach | Severity | Deadline | Owner
 
 async function seedCompanies() {
   const FINDORFF_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Findorff QC Agent ready. Query LIMS and QMS data.' })
-  const DEMO_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'AgentOS ready. What would you like to explore?' })
+  const DEMO_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'AgentOS ready. What would you like to explore?', logo_url: '/madstack-icon.svg' })
   const LATTICE_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lattice ready. Query LIMS, QMS, and Rosetta.' })
   const LANCASTER_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lancaster Portfolio Intelligence ready.', bg: '#f0fdf4', surface: '#ffffff', border: '#bbf7d0' })
 
@@ -777,7 +790,7 @@ async function seedCompanies() {
   // ── Demo company (root default) ──────────────────────────────────────────
   await sql`
     INSERT INTO companies (id, name, description, color, brand_config, base_context, admin_key) VALUES
-    ('demo', 'AgentOS', 'General-purpose enterprise AI assistant demo', '#0e7490', ${DEMO_BRAND}::jsonb, ${DEMO_BASE_CONTEXT}, 'demo-admin')
+    ('demo', 'AgentOS', 'General-purpose enterprise AI assistant demo', '#f97316', ${DEMO_BRAND}::jsonb, ${DEMO_BASE_CONTEXT}, 'demo-admin')
   `
   await sql`
     INSERT INTO personas (id, company_id, name, description) VALUES

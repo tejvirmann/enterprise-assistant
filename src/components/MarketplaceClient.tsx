@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Company, Repo, RepoModule } from '@/lib/types'
+import type { Company, Repo, RepoModule, McpServer } from '@/lib/types'
 
 const SYSTEM_META: Record<string, { label: string; description: string; owner: string }> = {
   lims:    { label: 'LIMS',    description: 'Lab Information Management — samples, assays, OOS, instruments', owner: 'MadStack' },
@@ -26,6 +26,7 @@ interface Props {
   toolGroups: Record<string, { toolId: string; description: string }[]>
   repos: Repo[]
   repoModules: RepoModule[]
+  mcpServers: McpServer[]
   personas: PersonaStub[]
   isAdmin: boolean
   adminKey: string | null
@@ -39,12 +40,13 @@ function toast(msg: string, ok = true) {
   setTimeout(() => el.remove(), 3000)
 }
 
-export function MarketplaceClient({ company, enabledTools: initial, toolGroups, repos: initialRepos, repoModules, personas, isAdmin, adminKey }: Props) {
+export function MarketplaceClient({ company, enabledTools: initial, toolGroups, repos: initialRepos, repoModules, mcpServers: initialMcpServers, personas, isAdmin, adminKey }: Props) {
   const router = useRouter()
   const [enabled, setEnabled] = useState<Set<string>>(new Set(initial))
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set())
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set())
   const [repos, setRepos] = useState<Repo[]>(initialRepos)
+  const [mcpServers, setMcpServers] = useState<McpServer[]>(initialMcpServers)
   const [query, setQuery] = useState('')
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -53,6 +55,14 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
   const [repoDesc, setRepoDesc] = useState('')
   // Per-module persona selector state: moduleKey → personaId
   const [modulePersona, setModulePersona] = useState<Record<string, string>>({})
+
+  // External MCP server form
+  const [showAddMcp, setShowAddMcp] = useState(false)
+  const [mcpName, setMcpName] = useState('')
+  const [mcpUrl, setMcpUrl] = useState('')
+  const [mcpScanning, setMcpScanning] = useState(false)
+  const [expandedMcp, setExpandedMcp] = useState<Set<number>>(new Set())
+  const [rescanningId, setRescanningId] = useState<number | null>(null)
 
   // Custom module form
   const [showCustomModule, setShowCustomModule] = useState(false)
@@ -173,6 +183,68 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
     })
     setRepos((r) => r.filter((x) => x.id !== repoId))
     toast('Removed')
+  }
+
+  async function addMcpServer() {
+    if (!mcpName.trim()) return toast('Name required', false)
+    if (!mcpUrl.trim()) return toast('URL required', false)
+    if (!isAdmin) return toast('Add ?key=xxx to save permanently', false)
+    setMcpScanning(true)
+    try {
+      const res = await fetch(`/api/company/${company.id}/mcp-servers`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: mcpName, url: mcpUrl, adminKey }),
+      })
+      if (!res.ok) { toast('Failed to add server', false); return }
+      const { id, toolCount, scanError } = await res.json()
+      setMcpServers((s) => [...s, { id, company_id: company.id, name: mcpName, url: mcpUrl, transport: 'http', enabled: true, tools: [], last_scanned: null, created_at: new Date().toISOString() }])
+      setMcpName(''); setMcpUrl('')
+      setShowAddMcp(false)
+      if (scanError) toast(`Server added — scan failed: ${scanError}`, false)
+      else toast(`Server added — found ${toolCount} tool${toolCount !== 1 ? 's' : ''}`)
+      router.refresh()
+    } finally {
+      setMcpScanning(false)
+    }
+  }
+
+  async function rescanMcpServer(serverId: number) {
+    if (!isAdmin) return toast('Admin key required', false)
+    setRescanningId(serverId)
+    try {
+      const res = await fetch(`/api/company/${company.id}/mcp-servers/${serverId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminKey }),
+      })
+      if (!res.ok) { const b = await res.json(); toast(b.error ?? 'Rescan failed', false); return }
+      const { toolCount } = await res.json()
+      toast(`Rescanned — ${toolCount} tool${toolCount !== 1 ? 's' : ''} found`)
+      router.refresh()
+    } finally {
+      setRescanningId(null)
+    }
+  }
+
+  async function toggleMcpServer(server: McpServer) {
+    const next = !server.enabled
+    if (isAdmin) {
+      await fetch(`/api/company/${company.id}/mcp-servers/${server.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next, adminKey }),
+      })
+    }
+    setMcpServers((s) => s.map((x) => x.id === server.id ? { ...x, enabled: next } : x))
+    toast(next ? `${server.name} enabled` : `${server.name} disabled`, next)
+  }
+
+  async function removeMcpServer(serverId: number) {
+    if (!isAdmin) return toast('Admin key required', false)
+    await fetch(`/api/company/${company.id}/mcp-servers`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverId, adminKey }),
+    })
+    setMcpServers((s) => s.filter((x) => x.id !== serverId))
+    toast('Server removed')
   }
 
   return (
@@ -444,6 +516,122 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
             })}
           </div>
         </div>
+
+        {/* External MCP Servers */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-medium tracking-[.14em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-3)' }}>External MCP Servers</p>
+            <button onClick={() => setShowAddMcp((v) => !v)}
+              className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
+              + Add Server
+            </button>
+          </div>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-4)' }}>
+            Register an HTTP MCP server by URL. Tools are fetched via <code style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11 }}>tools/list</code> and called live during agent runs.
+          </p>
+
+          {showAddMcp && (
+            <div className="rounded-xl border p-5 mb-4 bg-white" style={{ borderColor: 'var(--teal)', boxShadow: 'var(--sh)' }}>
+              <p className="text-[10px] font-medium tracking-[.12em] uppercase mb-3" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--teal)' }}>Add MCP Server</p>
+              <div className="space-y-2">
+                <input value={mcpName} onChange={(e) => setMcpName(e.target.value)} placeholder="Name *"
+                  className="w-full text-sm px-3 py-2 rounded-lg border outline-none" style={{ borderColor: 'var(--border)', color: 'var(--ink)' }} />
+                <input value={mcpUrl} onChange={(e) => setMcpUrl(e.target.value)} placeholder="URL — e.g. https://your-server.com/mcp"
+                  className="w-full text-sm px-3 py-2 rounded-lg border outline-none" style={{ borderColor: 'var(--border)', color: 'var(--ink)', fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} />
+                <p className="text-[10px]" style={{ color: 'var(--ink-4)', fontFamily: 'var(--font-mono, monospace)' }}>
+                  Server must accept POST with JSON-RPC 2.0. Tools are fetched immediately on add and stored — use Rescan to update.
+                </p>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={addMcpServer} disabled={mcpScanning}
+                  className="text-sm px-5 py-2 rounded-full font-semibold text-white disabled:opacity-60 flex items-center gap-2"
+                  style={{ background: 'var(--teal)' }}>
+                  {mcpScanning && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />}
+                  {mcpScanning ? 'Scanning…' : 'Add & Scan'}
+                </button>
+                <button onClick={() => setShowAddMcp(false)} className="text-sm px-4 py-2 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {mcpServers.length === 0 && !showAddMcp && (
+            <div className="rounded-xl border border-dashed p-8 text-center" style={{ borderColor: 'var(--border)' }}>
+              <p className="text-sm font-medium mb-1" style={{ color: 'var(--ink-3)' }}>No external MCP servers</p>
+              <p className="text-xs" style={{ color: 'var(--ink-4)' }}>Add a server URL to expose its tools to the agent.</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {mcpServers.map((server) => {
+              const isExpanded = expandedMcp.has(server.id)
+              const isRescanning = rescanningId === server.id
+              return (
+                <div key={server.id} className="rounded-xl border bg-white overflow-hidden"
+                  style={{ borderColor: server.enabled ? 'var(--teal)' : 'var(--border)', boxShadow: 'var(--sh)' }}>
+                  <div className="flex items-center gap-4 px-5 py-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{server.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--teal-soft)', color: 'var(--teal-ink)' }}>
+                          {server.tools.length} tools
+                        </span>
+                        {server.enabled && <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#dcfce7', color: '#166534' }}>✓ Active</span>}
+                      </div>
+                      <p className="text-[10px] mt-0.5 truncate" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>{server.url}</p>
+                      {server.last_scanned && (
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-4)' }}>
+                          Last scanned {new Date(server.last_scanned).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {server.tools.length > 0 && (
+                        <button onClick={() => setExpandedMcp((p) => { const n = new Set(p); n.has(server.id) ? n.delete(server.id) : n.add(server.id); return n })}
+                          className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
+                          {isExpanded ? 'Hide' : 'View tools'}
+                        </button>
+                      )}
+                      <button onClick={() => rescanMcpServer(server.id)} disabled={isRescanning}
+                        className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 disabled:opacity-50"
+                        style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
+                        title="Re-fetch tools list">
+                        {isRescanning
+                          ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                          : '↻'} Rescan
+                      </button>
+                      <button onClick={() => toggleMcpServer(server)}
+                        className="text-xs px-4 py-1.5 rounded-full font-semibold text-white"
+                        style={{ background: server.enabled ? 'var(--ink-3)' : 'var(--teal)' }}>
+                        {server.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button onClick={() => removeMcpServer(server.id)}
+                        className="text-xs px-2 py-1.5 rounded-lg border transition-colors"
+                        style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded && server.tools.length > 0 && (
+                    <div className="border-t px-5 py-3 space-y-2" style={{ borderColor: 'var(--border-2)', background: 'var(--teal-softer)' }}>
+                      {server.tools.map((t) => (
+                        <div key={t.name} className="flex items-start gap-3">
+                          <code className="text-[11px] px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
+                            style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--surface)', border: '1px solid var(--teal-soft)', color: 'var(--teal-ink)' }}>
+                            {t.name}
+                          </code>
+                          <p className="text-xs" style={{ color: 'var(--ink-3)' }}>{t.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
       </div>
     </div>
   )

@@ -2,7 +2,7 @@ import { sql } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { ALL_TOOLS } from '@/tools/index'
 import { MarketplaceClient } from '@/components/MarketplaceClient'
-import type { Company, Persona, Repo, RepoModule } from '@/lib/types'
+import type { Company, Persona, Repo, RepoModule, McpServer } from '@/lib/types'
 
 interface Props {
   params: Promise<{ company: string }>
@@ -51,6 +51,10 @@ export default async function MarketplacePage({ params, searchParams }: Props) {
     SELECT id, name FROM personas WHERE company_id = ${slug} ORDER BY created_at
   ` as Pick<Persona, 'id' | 'name'>[]
 
+  const mcpServers = await sql`
+    SELECT * FROM company_mcp_servers WHERE company_id = ${slug} ORDER BY created_at
+  ` as McpServer[]
+
   const toolGroups = buildToolGroups()
 
   return (
@@ -60,6 +64,7 @@ export default async function MarketplacePage({ params, searchParams }: Props) {
       toolGroups={toolGroups}
       repos={repos}
       repoModules={repoModules}
+      mcpServers={mcpServers}
       personas={personas}
       isAdmin={isAdmin}
       adminKey={key ?? null}

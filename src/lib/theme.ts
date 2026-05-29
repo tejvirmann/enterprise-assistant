@@ -5,6 +5,7 @@ export interface BrandConfig {
   teal_ink?: string
   tagline?: string
   chat_welcome?: string
+  logo_url?: string
 }
 
 function hexToRgb(hex: string): [number, number, number] {

@@ -60,6 +60,24 @@ export interface CompanyTool {
   enabled: boolean
 }
 
+export interface McpServerTool {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+export interface McpServer {
+  id: number
+  company_id: string
+  name: string
+  url: string
+  transport: string
+  enabled: boolean
+  tools: McpServerTool[]
+  last_scanned: string | null
+  created_at: string
+}
+
 export interface CompanyData {
   company: Company
   persona: Persona

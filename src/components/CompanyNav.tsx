@@ -9,6 +9,7 @@ interface Props {
   name: string
   color: string
   tagline?: string
+  logoUrl?: string
 }
 
 const TABS = [
@@ -17,7 +18,7 @@ const TABS = [
   { label: 'Session',     href: (slug: string) => `/${slug}` },
 ]
 
-function NavInner({ slug, name, color, tagline = 'by MadStack' }: Props) {
+function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props) {
   const pathname = usePathname()
   const params = useSearchParams()
   const key = params.get('key')
@@ -36,14 +37,24 @@ function NavInner({ slug, name, color, tagline = 'by MadStack' }: Props) {
       style={{ background: color, height: 54 }}
     >
       {/* Brand */}
-      <div className="flex flex-col leading-tight flex-shrink-0">
-        <span className="text-white font-bold text-[15px] tracking-tight">{name} Demo</span>
-        <span
-          className="text-[10px] font-medium tracking-[.08em] opacity-50"
-          style={{ fontFamily: 'var(--font-mono, monospace)', color: '#fff' }}
-        >
-          {tagline}
-        </span>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        {logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt={name}
+            style={{ height: 34, width: 34, borderRadius: 7, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.2), 0 2px 6px rgba(0,0,0,0.18)' }}
+          />
+        )}
+        <div className="flex flex-col leading-tight">
+          <span className="text-white font-bold text-[15px] tracking-tight">{name}</span>
+          <span
+            className="text-[10px] font-medium tracking-[.08em] opacity-50"
+            style={{ fontFamily: 'var(--font-mono, monospace)', color: '#fff' }}
+          >
+            {tagline}
+          </span>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -106,9 +117,12 @@ export function CompanyNav(props: Props) {
         className="flex items-center px-7 flex-shrink-0 border-b border-white/10"
         style={{ background: props.color, height: 54 }}
       >
-        <div className="flex flex-col leading-tight">
-          <span className="text-white font-bold text-[15px] tracking-tight">{props.name} Demo</span>
-          <span className="text-[10px] opacity-50 text-white" style={{ fontFamily: 'var(--font-mono, monospace)' }}>by MadStack</span>
+        <div className="flex items-center gap-3">
+          {props.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={props.logoUrl} alt={props.name} style={{ height: 34, width: 34, borderRadius: 7 }} />
+          )}
+          <span className="text-white font-bold text-[15px] tracking-tight">{props.name}</span>
         </div>
       </header>
     }>

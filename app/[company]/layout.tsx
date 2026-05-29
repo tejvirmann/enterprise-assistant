@@ -29,6 +29,7 @@ export default async function CompanyLayout({ children, params }: Props) {
         name={company.name as string}
         color={company.color as string}
         tagline={cfg.tagline}
+        logoUrl={cfg.logo_url}
       />
       <div className="flex-1 min-h-0">
         {children}

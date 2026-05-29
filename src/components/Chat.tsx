@@ -11,6 +11,7 @@ interface Props {
   activeToolIds: string[]
   activeModuleIds: number[]
   suggestions?: string[]
+  welcomeMessage?: string
 }
 
 const DEFAULT_SUGGESTIONS = [
@@ -154,7 +155,7 @@ const mdComponents = {
   hr: () => <hr className="my-4" style={{ borderColor: 'var(--border)' }} />,
 }
 
-export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, suggestions }: Props) {
+export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, suggestions, welcomeMessage }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setInput } = useChat({
@@ -176,7 +177,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-5 pb-12">
             <p className="text-sm" style={{ color: 'var(--ink-4)' }}>
-              Agent is ready. Try a prompt or type your own.
+              {welcomeMessage ?? 'Agent is ready. Try a prompt or type your own.'}
             </p>
             <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
               {activeSuggestions.map((s) => (
@@ -198,14 +199,13 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
         {messages.map((m) => {
           if (m.role === 'user') {
             return (
-              <div key={m.id} className="flex items-start gap-3">
-                <span
-                  className="text-sm font-semibold flex-shrink-0 mt-0.5 select-none"
-                  style={{ color: brandColor, fontFamily: 'var(--font-mono, monospace)' }}
+              <div key={m.id} className="flex justify-end">
+                <div
+                  className="max-w-[72%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm font-medium"
+                  style={{ background: brandColor, color: '#fff' }}
                 >
-                  &gt;
-                </span>
-                <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{m.content}</p>
+                  {m.content}
+                </div>
               </div>
             )
           }

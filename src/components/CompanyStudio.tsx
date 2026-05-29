@@ -7,9 +7,10 @@ import type { CompanyData } from '@/lib/types'
 
 interface Props {
   data: CompanyData
+  chatWelcome?: string
 }
 
-export function CompanyStudio({ data }: Props) {
+export function CompanyStudio({ data, chatWelcome }: Props) {
   const { company, persona, modules, tools } = data
 
   const [activeModuleIds, setActiveModuleIds] = useState<number[]>(
@@ -19,6 +20,7 @@ export function CompanyStudio({ data }: Props) {
     tools.filter((t) => t.enabled).map((t) => t.tool_id)
   )
   const [chatKey, setChatKey] = useState(0)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const toggleModule = useCallback((id: number) => {
     setActiveModuleIds((prev) =>
@@ -40,10 +42,8 @@ export function CompanyStudio({ data }: Props) {
   const relaunch = useCallback(() => setChatKey((k) => k + 1), [])
 
   return (
-    <div
-      className="flex h-full min-h-0"
-      style={{ '--brand': company.color } as React.CSSProperties}
-    >
+    <div className="flex h-full min-h-0">
+      {sidebarOpen && (
         <ConfigPanel
           company={company}
           persona={persona}
@@ -54,16 +54,29 @@ export function CompanyStudio({ data }: Props) {
           onToggleModule={toggleModule}
           onToggleServer={toggleServer}
           onRelaunch={relaunch}
+          onCollapse={() => setSidebarOpen(false)}
         />
-        <div className="flex-1 min-w-0" style={{ background: 'var(--bg)' }}>
-          <Chat
-            key={chatKey}
-            companySlug={company.id}
-            brandColor={company.color}
-            activeToolIds={activeToolIds}
-            activeModuleIds={activeModuleIds}
-          />
-        </div>
+      )}
+      <div className="flex-1 min-w-0 relative" style={{ background: 'var(--bg)' }}>
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--ink-3)' }}
+            title="Show panel"
+          >
+            <span style={{ fontSize: 10 }}>▶</span> Panel
+          </button>
+        )}
+        <Chat
+          key={chatKey}
+          companySlug={company.id}
+          brandColor={company.color}
+          activeToolIds={activeToolIds}
+          activeModuleIds={activeModuleIds}
+          welcomeMessage={chatWelcome}
+        />
+      </div>
     </div>
   )
 }

@@ -1,3 +1,5 @@
+export type { BrandConfig } from './theme'
+
 export interface Company {
   id: string
   name: string
@@ -26,6 +28,28 @@ export interface PersonaModule {
   description: string | null
   tokens: number | null
   enabled: boolean
+  content: string | null
+}
+
+export interface Repo {
+  id: string
+  name: string
+  description: string | null
+  repo_url: string | null
+  owner: string | null
+  scope: string
+  verified: boolean
+  module_count: number
+}
+
+export interface RepoModule {
+  id: number
+  repo_id: string
+  path: string
+  type: string
+  name: string
+  description: string | null
+  tokens: number | null
   content: string | null
 }
 

@@ -1,7 +1,7 @@
 import { sql } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { PersonasClient } from '@/components/PersonasClient'
-import type { Company, Persona, PersonaModule } from '@/lib/types'
+import type { Company, Persona, PersonaModule, Repo, RepoModule } from '@/lib/types'
 
 interface Props {
   params: Promise<{ company: string }>
@@ -33,11 +33,26 @@ export default async function PersonasPage({ params, searchParams }: Props) {
     ORDER BY pm.persona_id, pm.type, pm.name
   ` as PersonaModule[]
 
+  const repos = await sql`
+    SELECT r.* FROM repos r
+    JOIN company_repos cr ON cr.repo_id = r.id
+    WHERE cr.company_id = ${slug}
+    ORDER BY r.name
+  ` as Repo[]
+
+  const repoModules = repos.length ? await sql`
+    SELECT * FROM repo_modules
+    WHERE repo_id = ANY(${repos.map((r) => r.id)})
+    ORDER BY repo_id, type, name
+  ` as RepoModule[] : []
+
   return (
     <PersonasClient
       company={company}
       personas={personas}
       modules={modules}
+      repos={repos}
+      repoModules={repoModules}
       isAdmin={isAdmin}
       adminKey={key ?? null}
     />

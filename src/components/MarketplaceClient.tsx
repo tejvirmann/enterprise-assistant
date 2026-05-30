@@ -40,21 +40,37 @@ function toast(msg: string, ok = true) {
   setTimeout(() => el.remove(), 3000)
 }
 
-export function MarketplaceClient({ company, enabledTools: initial, toolGroups, repos: initialRepos, repoModules, mcpServers: initialMcpServers, personas, isAdmin, adminKey }: Props) {
+function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button onClick={onChange}
+      className="w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all"
+      style={{ borderColor: checked ? 'var(--teal)' : 'var(--border)', background: checked ? 'var(--teal)' : 'white' }}>
+      {checked && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
+    </button>
+  )
+}
+
+export function MarketplaceClient({ company, enabledTools: initial, toolGroups, repos: initialRepos, repoModules, mcpServers: initialMcpServers, personas: initialPersonas, isAdmin, adminKey }: Props) {
   const router = useRouter()
   const [enabled, setEnabled] = useState<Set<string>>(new Set(initial))
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set())
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set())
   const [repos, setRepos] = useState<Repo[]>(initialRepos)
   const [mcpServers, setMcpServers] = useState<McpServer[]>(initialMcpServers)
+  const [personas, setPersonas] = useState<PersonaStub[]>(initialPersonas)
   const [query, setQuery] = useState('')
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [repoUrl, setRepoUrl] = useState('')
   const [repoName, setRepoName] = useState('')
   const [repoDesc, setRepoDesc] = useState('')
-  // Per-module persona selector state: moduleKey → personaId
-  const [modulePersona, setModulePersona] = useState<Record<string, string>>({})
+
+  // Selection — resets on page reload
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [actionPersonaId, setActionPersonaId] = useState(initialPersonas[0]?.id ?? '')
+  const [creatingPersonaBar, setCreatingPersonaBar] = useState(false)
+  const [createBarName, setCreateBarName] = useState('')
+  const [creatingPersona, setCreatingPersona] = useState(false)
 
   // External MCP server form
   const [showAddMcp, setShowAddMcp] = useState(false)
@@ -66,7 +82,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
 
   // Custom module form
   const [showCustomModule, setShowCustomModule] = useState(false)
-  const [cmPersonaId, setCmPersonaId] = useState(personas[0]?.id ?? '')
+  const [cmPersonaId, setCmPersonaId] = useState(initialPersonas[0]?.id ?? '')
   const [cmName, setCmName] = useState('')
   const [cmType, setCmType] = useState('skill')
   const [cmDesc, setCmDesc] = useState('')
@@ -95,6 +111,88 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
     })
   }, [q, repos, repoModules])
 
+  function toggleSelect(key: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  async function addSelectedToPersona(personaId: string) {
+    const personaName = personas.find(p => p.id === personaId)?.name ?? 'persona'
+    let count = 0
+    for (const key of selected) {
+      if (key.startsWith('builtin:')) {
+        const prefix = key.slice(8)
+        const meta = SYSTEM_META[prefix] ?? { label: prefix.toUpperCase(), description: 'Tool server' }
+        const tools = toolGroups[prefix] ?? []
+        const toolList = tools.map(t => `- **${t.toolId.slice(prefix.length + 1)}**: ${t.description}`).join('\n')
+        await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `${meta.label} Tools`, type: 'context', description: meta.description, content: `## ${meta.label} — Available Tools\n\n${meta.description}\n\n${toolList}`, adminKey }),
+        })
+        count++
+      } else if (key.startsWith('mcp:')) {
+        const server = mcpServers.find(s => s.id === parseInt(key.slice(4)))
+        if (server) {
+          const toolList = server.tools.length
+            ? server.tools.map(t => `- **${t.name}**: ${t.description}`).join('\n')
+            : '_No tools scanned yet. Use Rescan to fetch the tool list._'
+          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: `${server.name} Tools`, type: 'context', description: `Tool documentation for ${server.name} MCP server`, content: `## ${server.name} — Available MCP Tools\n\nLive tools via **${server.name}** (${server.url}):\n\n${toolList}`, adminKey }),
+          })
+          count++
+        }
+      } else if (key.startsWith('repo:')) {
+        const repoId = key.slice(5)
+        const mods = repoModules.filter(m => m.repo_id === repoId)
+        for (const m of mods) {
+          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repo_id: repoId, path: m.path, adminKey }),
+          })
+        }
+        count += mods.length
+      } else if (key.startsWith('module:')) {
+        const rest = key.slice(7)
+        const sep = rest.indexOf('::')
+        if (sep !== -1) {
+          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repo_id: rest.slice(0, sep), path: rest.slice(sep + 2), adminKey }),
+          })
+          count++
+        }
+      }
+    }
+    setSelected(new Set())
+    toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName}${!isAdmin ? ' (session only)' : ''}`)
+    if (isAdmin) router.refresh()
+  }
+
+  async function createPersonaAndAdd() {
+    if (!createBarName.trim()) return
+    setCreatingPersona(true)
+    try {
+      const res = await fetch(`/api/company/${company.id}/personas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: createBarName.trim(), adminKey }),
+      })
+      if (!res.ok) { toast('Failed to create persona', false); return }
+      const { id } = await res.json()
+      const newP: PersonaStub = { id, name: createBarName.trim() }
+      setPersonas(p => [...p, newP])
+      setActionPersonaId(id)
+      setCreateBarName('')
+      setCreatingPersonaBar(false)
+      await addSelectedToPersona(id)
+    } finally {
+      setCreatingPersona(false)
+    }
+  }
+
   async function toggleServer(prefix: string) {
     const serverTools = (toolGroups[prefix] ?? []).map((t) => t.toolId)
     const allOn = serverTools.every((id) => enabled.has(id))
@@ -114,27 +212,6 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
       toast('Session only — add ?key=xxx to persist', false)
     }
     setEnabled(next)
-  }
-
-  async function addRepoToPersona(repoId: string, personaId: string, modules: RepoModule[]) {
-    for (const m of modules) {
-      await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo_id: repoId, path: m.path, adminKey }),
-      })
-    }
-    toast(`Added ${modules.length} module${modules.length !== 1 ? 's' : ''} to ${personas.find(p=>p.id===personaId)?.name ?? 'persona'}` + (!isAdmin ? ' (session only)' : ''))
-    if (isAdmin) router.refresh()
-  }
-
-  async function addModuleToPersona(repoId: string, path: string, personaId: string) {
-    const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo_id: repoId, path, adminKey }),
-    })
-    if (!res.ok) { toast('Failed', false); return }
-    toast(`Added to ${personas.find(p=>p.id===personaId)?.name ?? 'persona'}` + (!isAdmin ? ' (session only)' : ''))
-    if (isAdmin) router.refresh()
   }
 
   async function addCustomModule() {
@@ -161,19 +238,12 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
       })
       if (!res.ok) { toast(!isAdmin ? 'Add ?key=xxx to persist' : 'Failed', false); return }
       const { id, moduleCount } = await res.json()
-      setRepos((r) => [...r, {
-        id, name: repoName, description: repoDesc || null, repo_url: repoUrl || null,
-        owner: null, scope: 'private', verified: false, module_count: moduleCount ?? 0,
-      }])
+      setRepos((r) => [...r, { id, name: repoName, description: repoDesc || null, repo_url: repoUrl || null, owner: null, scope: 'private', verified: false, module_count: moduleCount ?? 0 }])
       setRepoName(''); setRepoDesc(''); setRepoUrl('')
       setShowAddRepo(false)
-      toast(moduleCount > 0
-        ? `Repository added — scanned ${moduleCount} module${moduleCount !== 1 ? 's' : ''} from GitHub`
-        : 'Repository added (no .md context files found)')
+      toast(moduleCount > 0 ? `Repository added — scanned ${moduleCount} module${moduleCount !== 1 ? 's' : ''} from GitHub` : 'Repository added (no .md context files found)')
       if (moduleCount > 0) router.refresh()
-    } finally {
-      setScanning(false)
-    }
+    } finally { setScanning(false) }
   }
 
   async function removeRepo(repoId: string) {
@@ -203,9 +273,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
       if (scanError) toast(`Server added — scan failed: ${scanError}`, false)
       else toast(`Server added — found ${toolCount} tool${toolCount !== 1 ? 's' : ''}`)
       router.refresh()
-    } finally {
-      setMcpScanning(false)
-    }
+    } finally { setMcpScanning(false) }
   }
 
   async function rescanMcpServer(serverId: number) {
@@ -220,9 +288,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
       const { toolCount } = await res.json()
       toast(`Rescanned — ${toolCount} tool${toolCount !== 1 ? 's' : ''} found`)
       router.refresh()
-    } finally {
-      setRescanningId(null)
-    }
+    } finally { setRescanningId(null) }
   }
 
   async function toggleMcpServer(server: McpServer) {
@@ -255,7 +321,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
           <div>
             <h1 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--indigo)' }}>Marketplace</h1>
             <p className="text-sm mt-0.5" style={{ color: 'var(--ink-3)' }}>
-              Enable MCP tool servers and load context repos into personas.
+              Select tools and context, then add them to a persona. Selections clear on reload.
               {!isAdmin && <span className="ml-2 font-medium" style={{ color: 'var(--warn)' }}>
                 Add <code className="px-1 py-0.5 rounded text-xs" style={{ background: 'var(--teal-softer)', color: 'var(--teal-ink)' }}>?key=xxx</code> to save permanently.
               </span>}
@@ -316,13 +382,11 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
 
       <div className="px-8 py-6 max-w-4xl space-y-10">
 
-        {/* MCP Tool Servers */}
+        {/* Built-in MCP Tool Servers */}
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <p className="text-[10px] font-medium tracking-[.14em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-3)' }}>MCP Tool Servers</p>
-          </div>
+          <p className="text-[10px] font-medium tracking-[.14em] uppercase mb-1" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-3)' }}>MCP Tool Servers</p>
           <p className="text-xs mb-4" style={{ color: 'var(--ink-4)' }}>
-            Enable tool servers so the agent can query live data. Toggle servers on/off — changes persist when ?key is set.
+            Check to include tool documentation in a persona. Toggle Enable/Disable to make tools available to the agent.
           </p>
           {filteredPrefixes.length === 0 && <p className="text-sm" style={{ color: 'var(--ink-4)' }}>No results.</p>}
           <div className="space-y-3">
@@ -332,10 +396,13 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
               const allOn = tools.every((t) => enabled.has(t.toolId))
               const isExpanded = expandedTools.has(prefix)
               const filteredTools = q ? tools.filter((t) => t.toolId.includes(q) || t.description.toLowerCase().includes(q)) : tools
+              const selKey = `builtin:${prefix}`
+              const isSel = selected.has(selKey)
               return (
-                <div key={prefix} className="rounded-xl border bg-white overflow-hidden"
-                  style={{ borderColor: allOn ? 'var(--teal)' : 'var(--border)', boxShadow: 'var(--sh)' }}>
-                  <div className="flex items-center gap-4 px-5 py-4">
+                <div key={prefix} className="rounded-xl border bg-white overflow-hidden transition-shadow"
+                  style={{ borderColor: allOn ? 'var(--teal)' : 'var(--border)', boxShadow: isSel ? '0 0 0 2px var(--teal), var(--sh)' : 'var(--sh)' }}>
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    <Checkbox checked={isSel} onChange={() => toggleSelect(selKey)} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{meta.label}</span>
@@ -386,7 +453,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
             </button>
           </div>
           <p className="text-xs mb-4" style={{ color: 'var(--ink-4)' }}>
-            Add GitHub repos or custom skill libraries. Browse modules and add them to a persona.
+            Check a repo to include all its modules, or expand and pick individual ones.
           </p>
 
           {showAddRepo && (
@@ -426,45 +493,35 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
               const mods = repoModules.filter((m) => m.repo_id === r.id)
               const filteredMods = q ? mods.filter((m) => `${m.name} ${m.description ?? ''} ${m.type}`.toLowerCase().includes(q)) : mods
               const isExpanded = expandedRepos.has(r.id)
+              const repoKey = `repo:${r.id}`
+              const isRepoSel = selected.has(repoKey)
               return (
-                <div key={r.id} className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: 'var(--teal)', boxShadow: 'var(--sh)' }}>
-                  <div className="flex items-center gap-4 px-5 py-4">
+                <div key={r.id} className="rounded-xl border bg-white overflow-hidden transition-shadow"
+                  style={{ borderColor: 'var(--teal)', boxShadow: isRepoSel ? '0 0 0 2px var(--teal), var(--sh)' : 'var(--sh)' }}>
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    <Checkbox checked={isRepoSel} onChange={() => toggleSelect(repoKey)} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{r.name}</span>
                         {r.verified && <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#dcfce7', color: '#166534' }}>✓ Verified</span>}
                         <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--teal-soft)', color: 'var(--teal-ink)' }}>
-                          {mods.length} modules
+                          {mods.length} module{mods.length !== 1 ? 's' : ''}
                         </span>
                       </div>
                       {r.description && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{r.description}</p>}
                       {r.repo_url && <p className="text-[10px] mt-0.5 truncate" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>{r.repo_url}</p>}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setExpandedRepos((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })}
-                        className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
-                        {isExpanded ? 'Hide' : 'Browse'}
-                      </button>
-                      {personas.length > 0 && isExpanded && (
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            value={modulePersona[`repo-${r.id}`] ?? personas[0].id}
-                            onChange={(e) => setModulePersona(prev => ({ ...prev, [`repo-${r.id}`]: e.target.value }))}
-                            className="text-xs px-2 py-1.5 rounded-lg border outline-none"
-                            style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
-                            onClick={(e) => e.stopPropagation()}>
-                            {personas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          <button onClick={() => addRepoToPersona(r.id, modulePersona[`repo-${r.id}`] ?? personas[0].id, mods)}
-                            className="text-xs px-3 py-1.5 rounded-full font-semibold text-white whitespace-nowrap" style={{ background: 'var(--teal)' }}>
-                            Add All
-                          </button>
-                        </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {mods.length > 0 && (
+                        <button onClick={() => setExpandedRepos((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })}
+                          className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
+                          {isExpanded ? 'Hide' : 'Browse'}
+                        </button>
                       )}
                       <button onClick={() => removeRepo(r.id)}
                         className="text-xs px-2 py-1.5 rounded-lg border transition-colors"
                         style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.borderColor = '#fecaca' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca' }}
                         onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
                         ✕
                       </button>
@@ -475,10 +532,16 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                     <div className="border-t" style={{ borderColor: 'var(--border-2)', background: 'var(--teal-softer)' }}>
                       {filteredMods.length === 0 && <p className="px-5 py-3 text-xs" style={{ color: 'var(--ink-4)' }}>No modules found.</p>}
                       {filteredMods.map((m) => {
-                        const key = `${m.repo_id}::${m.path}`
-                        const selPersonaId = modulePersona[key] ?? personas[0]?.id ?? ''
+                        const modKey = `module:${m.repo_id}::${m.path}`
+                        const isModSel = selected.has(modKey)
                         return (
-                          <div key={m.id} className="px-5 py-3 border-b last:border-b-0 flex items-start gap-3" style={{ borderColor: 'var(--border)' }}>
+                          <div key={m.id} className="px-5 py-3 border-b last:border-b-0 flex items-start gap-3"
+                            style={{ borderColor: 'var(--border)', background: isModSel ? 'rgba(54,153,150,.06)' : undefined }}>
+                            <button onClick={() => toggleSelect(modKey)}
+                              className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all"
+                              style={{ borderColor: isModSel ? 'var(--teal)' : 'var(--border)', background: isModSel ? 'var(--teal)' : 'white' }}>
+                              {isModSel && <span className="text-white text-[9px] font-bold leading-none">✓</span>}
+                            </button>
                             <span className={`${TYPE_COLORS[m.type] ?? 'bg-slate-100 text-slate-600'} text-[9px] font-medium tracking-[.06em] uppercase px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5`} style={{ fontFamily: 'var(--font-mono, monospace)' }}>{m.type}</span>
                             <div className="flex-1 min-w-0">
                               <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{m.name}</div>
@@ -491,21 +554,6 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                                 </pre>
                               )}
                             </div>
-                            {personas.length > 0 && (
-                              <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                                <select
-                                  value={selPersonaId}
-                                  onChange={(e) => setModulePersona(prev => ({ ...prev, [key]: e.target.value }))}
-                                  className="text-[10px] px-2 py-1 rounded-lg border outline-none"
-                                  style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
-                                  {personas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                                <button onClick={() => addModuleToPersona(r.id, m.path, selPersonaId)}
-                                  className="text-[10px] px-2.5 py-1 rounded-full font-medium text-white whitespace-nowrap" style={{ background: 'var(--teal)' }}>
-                                  Add
-                                </button>
-                              </div>
-                            )}
                           </div>
                         )
                       })}
@@ -565,10 +613,13 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
             {mcpServers.map((server) => {
               const isExpanded = expandedMcp.has(server.id)
               const isRescanning = rescanningId === server.id
+              const selKey = `mcp:${server.id}`
+              const isSel = selected.has(selKey)
               return (
-                <div key={server.id} className="rounded-xl border bg-white overflow-hidden"
-                  style={{ borderColor: server.enabled ? 'var(--teal)' : 'var(--border)', boxShadow: 'var(--sh)' }}>
-                  <div className="flex items-center gap-4 px-5 py-4">
+                <div key={server.id} className="rounded-xl border bg-white overflow-hidden transition-shadow"
+                  style={{ borderColor: server.enabled ? 'var(--teal)' : 'var(--border)', boxShadow: isSel ? '0 0 0 2px var(--teal), var(--sh)' : 'var(--sh)' }}>
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    <Checkbox checked={isSel} onChange={() => toggleSelect(selKey)} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{server.name}</span>
@@ -579,9 +630,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                       </div>
                       <p className="text-[10px] mt-0.5 truncate" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>{server.url}</p>
                       {server.last_scanned && (
-                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-4)' }}>
-                          Last scanned {new Date(server.last_scanned).toLocaleDateString()}
-                        </p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-4)' }}>Last scanned {new Date(server.last_scanned).toLocaleDateString()}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -593,11 +642,8 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                       )}
                       <button onClick={() => rescanMcpServer(server.id)} disabled={isRescanning}
                         className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 disabled:opacity-50"
-                        style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
-                        title="Re-fetch tools list">
-                        {isRescanning
-                          ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          : '↻'} Rescan
+                        style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
+                        {isRescanning ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : '↻'} Rescan
                       </button>
                       <button onClick={() => toggleMcpServer(server)}
                         className="text-xs px-4 py-1.5 rounded-full font-semibold text-white"
@@ -633,6 +679,64 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
         </div>
 
       </div>
+
+      {/* Sticky selection action bar */}
+      {selected.size > 0 && (
+        <div className="sticky bottom-0 z-20 px-8 pb-6 pt-2">
+          <div className="rounded-2xl border overflow-hidden"
+            style={{ background: 'white', borderColor: 'var(--teal)', boxShadow: '0 8px 32px rgba(15,26,26,.18)' }}>
+            <div className="px-5 py-3 flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                {selected.size} item{selected.size !== 1 ? 's' : ''} selected
+              </span>
+              <button onClick={() => setSelected(new Set())}
+                className="text-xs px-2.5 py-1 rounded-full border"
+                style={{ borderColor: 'var(--border)', color: 'var(--ink-4)' }}>
+                Deselect all
+              </button>
+              <div className="flex-1" />
+              {creatingPersonaBar ? (
+                <div className="flex items-center gap-2">
+                  <input autoFocus value={createBarName} onChange={(e) => setCreateBarName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && createPersonaAndAdd()}
+                    placeholder="New persona name…"
+                    className="text-xs px-3 py-2 rounded-lg border outline-none w-44"
+                    style={{ borderColor: 'var(--teal)', color: 'var(--ink)' }} />
+                  <button onClick={createPersonaAndAdd} disabled={creatingPersona}
+                    className="text-sm px-4 py-2 rounded-full font-semibold text-white disabled:opacity-60"
+                    style={{ background: 'var(--teal)' }}>
+                    {creatingPersona ? '…' : 'Create & Add'}
+                  </button>
+                  <button onClick={() => { setCreatingPersonaBar(false); setCreateBarName('') }}
+                    className="text-xs px-2" style={{ color: 'var(--ink-4)' }}>✕</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {personas.length > 0 && (
+                    <>
+                      <select value={actionPersonaId} onChange={(e) => setActionPersonaId(e.target.value)}
+                        className="text-xs px-2 py-2 rounded-lg border outline-none"
+                        style={{ borderColor: 'var(--border)', color: 'var(--ink)', background: 'var(--bg)' }}>
+                        {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <button onClick={() => addSelectedToPersona(actionPersonaId)}
+                        className="text-sm px-4 py-2 rounded-full font-semibold text-white"
+                        style={{ background: 'var(--teal)' }}>
+                        Add to Persona →
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => { setCreatingPersonaBar(true); setCreateBarName('') }}
+                    className="text-xs px-3 py-2 rounded-full border font-medium"
+                    style={{ borderColor: 'var(--teal)', color: 'var(--teal-ink)', background: 'var(--teal-softer)' }}>
+                    + New Persona
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

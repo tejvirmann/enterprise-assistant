@@ -8,6 +8,7 @@ export interface Company {
   color: string
   base_context: string | null
   default_persona_id: string | null
+  admin_key: string | null
 }
 
 export interface Persona {

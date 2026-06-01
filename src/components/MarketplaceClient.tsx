@@ -120,60 +120,60 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
   }
 
   async function addSelectedToPersona(personaId: string) {
+    if (!isAdmin) return toast('Admin key required — add ?key=xxx to the URL', false)
+    if (!personaId) return toast('Select a persona first', false)
     const personaName = personas.find(p => p.id === personaId)?.name ?? 'persona'
     let count = 0
+    let failed = 0
+
+    async function post(body: Record<string, unknown>) {
+      const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, adminKey }),
+      })
+      if (res.ok) count++; else failed++
+    }
+
     for (const key of selected) {
       if (key.startsWith('builtin:')) {
         const prefix = key.slice(8)
         const meta = SYSTEM_META[prefix] ?? { label: prefix.toUpperCase(), description: 'Tool server' }
         const tools = toolGroups[prefix] ?? []
         const toolList = tools.map(t => `- **${t.toolId.slice(prefix.length + 1)}**: ${t.description}`).join('\n')
-        await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: `${meta.label} Tools`, type: 'context', description: meta.description, content: `## ${meta.label} — Available Tools\n\n${meta.description}\n\n${toolList}`, adminKey }),
-        })
-        count++
+        await post({ name: `${meta.label} Tools`, type: 'context', description: meta.description, content: `## ${meta.label} — Available Tools\n\n${meta.description}\n\n${toolList}` })
       } else if (key.startsWith('mcp:')) {
         const server = mcpServers.find(s => s.id === parseInt(key.slice(4)))
         if (server) {
           const toolList = server.tools.length
             ? server.tools.map(t => `- **${t.name}**: ${t.description}`).join('\n')
             : '_No tools scanned yet. Use Rescan to fetch the tool list._'
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: `${server.name} Tools`, type: 'context', description: `Tool documentation for ${server.name} MCP server`, content: `## ${server.name} — Available MCP Tools\n\nLive tools via **${server.name}** (${server.url}):\n\n${toolList}`, adminKey }),
-          })
-          count++
+          await post({ name: `${server.name} Tools`, type: 'context', description: `Tool documentation for ${server.name} MCP server`, content: `## ${server.name} — Available MCP Tools\n\nLive tools via **${server.name}** (${server.url}):\n\n${toolList}` })
         }
       } else if (key.startsWith('repo:')) {
         const repoId = key.slice(5)
         const mods = repoModules.filter(m => m.repo_id === repoId)
-        for (const m of mods) {
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ repo_id: repoId, path: m.path, adminKey }),
-          })
-        }
-        count += mods.length
+        for (const m of mods) await post({ repo_id: repoId, path: m.path })
       } else if (key.startsWith('module:')) {
         const rest = key.slice(7)
         const sep = rest.indexOf('::')
-        if (sep !== -1) {
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ repo_id: rest.slice(0, sep), path: rest.slice(sep + 2), adminKey }),
-          })
-          count++
-        }
+        if (sep !== -1) await post({ repo_id: rest.slice(0, sep), path: rest.slice(sep + 2) })
       }
     }
+
     setSelected(new Set())
-    toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName}${!isAdmin ? ' (session only)' : ''}`)
-    if (isAdmin) router.refresh()
+    if (failed > 0 && count === 0) {
+      toast(`Failed to save — check that your admin key is correct`, false)
+    } else if (failed > 0) {
+      toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName} (${failed} failed)`, false)
+    } else {
+      toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName}`)
+    }
+    router.refresh()
   }
 
   async function createPersonaAndAdd() {
     if (!createBarName.trim()) return
+    if (!isAdmin) return toast('Admin key required — add ?key=xxx to the URL', false)
     setCreatingPersona(true)
     try {
       const res = await fetch(`/api/company/${company.id}/personas`, {
@@ -323,7 +323,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
             <p className="text-sm mt-0.5" style={{ color: 'var(--ink-3)' }}>
               Select tools and context, then add them to a persona. Selections clear on reload.
               {!isAdmin && <span className="ml-2 font-medium" style={{ color: 'var(--warn)' }}>
-                Add <code className="px-1 py-0.5 rounded text-xs" style={{ background: 'var(--teal-softer)', color: 'var(--teal-ink)' }}>?key=xxx</code> to save permanently.
+                Append <code className="px-1 py-0.5 rounded text-xs" style={{ background: 'var(--teal-softer)', color: 'var(--teal-ink)' }}>?key=xxx</code> to the URL to enable saving.
               </span>}
             </p>
           </div>

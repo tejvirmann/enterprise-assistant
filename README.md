@@ -1,5 +1,11 @@
 # Enterprise Assistant
 
+
+
+https://github.com/user-attachments/assets/846a19a9-1b02-49f0-ab90-67093eac99a0
+
+
+
 A context-configurable AI agent studio for enterprise demos and POCs, built by [MadStack](https://madstack.net).
 
 Each company gets a pre-loaded agent environment at `agent.madstack.net/[company]` — branded with its own color scheme and logo, pre-configured with context modules and MCP tools, and ready to use on arrival. The root (`/`) serves a blank scratch studio for building new agents.

@@ -2,8 +2,10 @@ import { streamText, jsonSchema, type Tool } from 'ai'
 import { sql } from '@/lib/db'
 import { resolveModel, isOpenWebUI } from '@/lib/provider'
 import { compileSystemPrompt } from '@/lib/compile'
+import { getEffectiveModules, getEffectiveTools, getEffectiveMcpServers } from '@/lib/presets'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getToolsForCompany } from '@/tools/index'
-import type { Company, Persona, PersonaModule, CompanyTool, McpServer, McpServerTool } from '@/lib/types'
+import type { Company, Persona, McpServerTool } from '@/lib/types'
 
 export async function POST(req: Request) {
   const { messages, companySlug, activeToolIds: clientToolIds, activeModuleIds: clientModuleIds } = await req.json()
@@ -19,6 +21,15 @@ export async function POST(req: Request) {
   }
   const company = companies[0] as Company
 
+  const clientIp = getClientIp(req)
+  const rl = await checkRateLimit(companySlug, clientIp, company.rate_limit_per_minute, company.rate_limit_per_visitor_per_minute)
+  if (!rl.allowed) {
+    return new Response(
+      JSON.stringify({ error: rl.scope === 'company' ? 'This deployment has hit its message limit. Try again shortly.' : 'You\'re sending messages too quickly. Try again shortly.' }),
+      { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rl.retryAfterSec ?? 60) } }
+    )
+  }
+
   const personaId = company.default_persona_id
   if (!personaId) {
     return new Response('No default persona configured', { status: 500 })
@@ -27,16 +38,8 @@ export async function POST(req: Request) {
   const personas = await sql`SELECT * FROM personas WHERE id = ${personaId}`
   const persona = personas[0] as Persona
 
-  const allModules = await sql`
-    SELECT * FROM persona_modules
-    WHERE persona_id = ${personaId}
-    ORDER BY type, name
-  ` as PersonaModule[]
-
-  const allCompanyTools = await sql`
-    SELECT * FROM company_tools
-    WHERE company_id = ${companySlug}
-  ` as CompanyTool[]
+  const allModules = await getEffectiveModules(companySlug, personaId)
+  const allCompanyTools = await getEffectiveTools(companySlug)
 
   // Use client overrides if provided, otherwise fall back to DB defaults
   const activeModules = Array.isArray(clientModuleIds)
@@ -47,10 +50,7 @@ export async function POST(req: Request) {
     ? clientToolIds.filter((id: string) => allCompanyTools.some((t) => t.tool_id === id))
     : allCompanyTools.filter((t) => t.enabled).map((t) => t.tool_id)
 
-  const mcpServers = await sql`
-    SELECT * FROM company_mcp_servers
-    WHERE company_id = ${companySlug} AND enabled = true
-  ` as McpServer[]
+  const mcpServers = (await getEffectiveMcpServers(companySlug)).filter((s) => s.enabled)
 
   const systemPrompt = compileSystemPrompt(company, activeModules, toolIds)
 

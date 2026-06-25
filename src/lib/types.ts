@@ -9,6 +9,9 @@ export interface Company {
   base_context: string | null
   default_persona_id: string | null
   admin_key: string | null
+  preset_id: string | null
+  rate_limit_per_minute: number | null
+  rate_limit_per_visitor_per_minute: number | null
 }
 
 export interface Persona {
@@ -30,6 +33,7 @@ export interface PersonaModule {
   tokens: number | null
   enabled: boolean
   content: string | null
+  example_prompts: string[]
 }
 
 export interface Repo {

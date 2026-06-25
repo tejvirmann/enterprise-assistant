@@ -7,6 +7,14 @@ export async function validateAdminKey(companyId: string, key: string | null): P
   return rows[0].admin_key === key
 }
 
+export function checkAdminSecret(key: string | undefined | null): Response | null {
+  const secret = process.env.ADMIN_SECRET
+  if (!secret || key !== secret) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return null
+}
+
 export function requireKey(isValid: boolean): Response | null {
   if (!isValid) {
     return new Response(JSON.stringify({ error: 'Invalid or missing admin key' }), {

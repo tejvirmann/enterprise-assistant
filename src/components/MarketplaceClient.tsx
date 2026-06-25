@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Company, Repo, RepoModule, McpServer } from '@/lib/types'
 
+type SourcedMcpServer = McpServer & { source: 'preset' | 'company' }
+
 const SYSTEM_META: Record<string, { label: string; description: string; owner: string }> = {
   lims:    { label: 'LIMS',    description: 'Lab Information Management — samples, assays, OOS, instruments', owner: 'MadStack' },
   qms:     { label: 'QMS',     description: 'Quality Management — batches, deviations, CAPAs, specifications', owner: 'MadStack' },
@@ -23,10 +25,11 @@ interface PersonaStub { id: string; name: string }
 interface Props {
   company: Company
   enabledTools: string[]
+  presetToolIds: string[]
   toolGroups: Record<string, { toolId: string; description: string }[]>
   repos: Repo[]
   repoModules: RepoModule[]
-  mcpServers: McpServer[]
+  mcpServers: SourcedMcpServer[]
   personas: PersonaStub[]
   isAdmin: boolean
   adminKey: string | null
@@ -50,13 +53,14 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   )
 }
 
-export function MarketplaceClient({ company, enabledTools: initial, toolGroups, repos: initialRepos, repoModules, mcpServers: initialMcpServers, personas: initialPersonas, isAdmin, adminKey }: Props) {
+export function MarketplaceClient({ company, enabledTools: initial, presetToolIds, toolGroups, repos: initialRepos, repoModules, mcpServers: initialMcpServers, personas: initialPersonas, isAdmin, adminKey }: Props) {
   const router = useRouter()
   const [enabled, setEnabled] = useState<Set<string>>(new Set(initial))
+  const presetTools = useMemo(() => new Set(presetToolIds), [presetToolIds])
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set())
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set())
   const [repos, setRepos] = useState<Repo[]>(initialRepos)
-  const [mcpServers, setMcpServers] = useState<McpServer[]>(initialMcpServers)
+  const [mcpServers, setMcpServers] = useState<SourcedMcpServer[]>(initialMcpServers)
   const [personas, setPersonas] = useState<PersonaStub[]>(initialPersonas)
   const [query, setQuery] = useState('')
   const [showAddRepo, setShowAddRepo] = useState(false)
@@ -88,6 +92,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
   const [cmDesc, setCmDesc] = useState('')
   const [cmContent, setCmContent] = useState('')
   const [cmTokens, setCmTokens] = useState('')
+  const [cmPrompts, setCmPrompts] = useState('')
 
   const q = query.toLowerCase()
 
@@ -120,6 +125,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
   }
 
   async function addSelectedToPersona(personaId: string) {
+    if (!isAdmin) return toast('Add ?key=xxx to the URL to add items to a persona', false)
     const personaName = personas.find(p => p.id === personaId)?.name ?? 'persona'
     let count = 0
     for (const key of selected) {
@@ -128,48 +134,49 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
         const meta = SYSTEM_META[prefix] ?? { label: prefix.toUpperCase(), description: 'Tool server' }
         const tools = toolGroups[prefix] ?? []
         const toolList = tools.map(t => `- **${t.toolId.slice(prefix.length + 1)}**: ${t.description}`).join('\n')
-        await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+        const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: `${meta.label} Tools`, type: 'context', description: meta.description, content: `## ${meta.label} — Available Tools\n\n${meta.description}\n\n${toolList}`, adminKey }),
         })
-        count++
+        if (res.ok) count++
       } else if (key.startsWith('mcp:')) {
         const server = mcpServers.find(s => s.id === parseInt(key.slice(4)))
         if (server) {
           const toolList = server.tools.length
             ? server.tools.map(t => `- **${t.name}**: ${t.description}`).join('\n')
             : '_No tools scanned yet. Use Rescan to fetch the tool list._'
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+          const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: `${server.name} Tools`, type: 'context', description: `Tool documentation for ${server.name} MCP server`, content: `## ${server.name} — Available MCP Tools\n\nLive tools via **${server.name}** (${server.url}):\n\n${toolList}`, adminKey }),
           })
-          count++
+          if (res.ok) count++
         }
       } else if (key.startsWith('repo:')) {
         const repoId = key.slice(5)
         const mods = repoModules.filter(m => m.repo_id === repoId)
         for (const m of mods) {
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+          const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ repo_id: repoId, path: m.path, adminKey }),
           })
+          if (res.ok) count++
         }
-        count += mods.length
       } else if (key.startsWith('module:')) {
         const rest = key.slice(7)
         const sep = rest.indexOf('::')
         if (sep !== -1) {
-          await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
+          const res = await fetch(`/api/company/${company.id}/personas/${personaId}/modules`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ repo_id: rest.slice(0, sep), path: rest.slice(sep + 2), adminKey }),
           })
-          count++
+          if (res.ok) count++
         }
       }
     }
     setSelected(new Set())
-    toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName}${!isAdmin ? ' (session only)' : ''}`)
-    if (isAdmin) router.refresh()
+    if (count === 0) { toast('Failed to add items — check the admin key', false); return }
+    toast(`Added ${count} item${count !== 1 ? 's' : ''} to ${personaName}`)
+    router.refresh()
   }
 
   async function createPersonaAndAdd() {
@@ -217,15 +224,17 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
   async function addCustomModule() {
     if (!cmName.trim()) return toast('Name required', false)
     if (!cmPersonaId) return toast('Select a persona', false)
+    if (!isAdmin) return toast('Add ?key=xxx to the URL to create a module', false)
+    const example_prompts = cmPrompts.split('\n').map((s) => s.trim()).filter(Boolean)
     const res = await fetch(`/api/company/${company.id}/personas/${cmPersonaId}/modules`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: cmName, type: cmType, description: cmDesc, content: cmContent, tokens: cmTokens ? parseInt(cmTokens) : null, adminKey }),
+      body: JSON.stringify({ name: cmName, type: cmType, description: cmDesc, content: cmContent, tokens: cmTokens ? parseInt(cmTokens) : null, example_prompts, adminKey }),
     })
-    if (!res.ok) { toast('Failed', false); return }
-    setCmName(''); setCmType('skill'); setCmDesc(''); setCmContent(''); setCmTokens('')
+    if (!res.ok) { toast('Failed to create module', false); return }
+    setCmName(''); setCmType('skill'); setCmDesc(''); setCmContent(''); setCmTokens(''); setCmPrompts('')
     setShowCustomModule(false)
-    toast('Module created' + (!isAdmin ? ' (session only)' : ''))
-    if (isAdmin) router.refresh()
+    toast('Module created')
+    router.refresh()
   }
 
   async function addRepo() {
@@ -267,7 +276,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
       })
       if (!res.ok) { toast('Failed to add server', false); return }
       const { id, toolCount, scanError } = await res.json()
-      setMcpServers((s) => [...s, { id, company_id: company.id, name: mcpName, url: mcpUrl, transport: 'http', enabled: true, tools: [], last_scanned: null, created_at: new Date().toISOString() }])
+      setMcpServers((s) => [...s, { id, company_id: company.id, name: mcpName, url: mcpUrl, transport: 'http', enabled: true, tools: [], last_scanned: null, created_at: new Date().toISOString(), source: 'company' }])
       setMcpName(''); setMcpUrl('')
       setShowAddMcp(false)
       if (scanError) toast(`Server added — scan failed: ${scanError}`, false)
@@ -276,8 +285,10 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
     } finally { setMcpScanning(false) }
   }
 
-  async function rescanMcpServer(serverId: number) {
+  async function rescanMcpServer(server: SourcedMcpServer) {
     if (!isAdmin) return toast('Admin key required', false)
+    if (server.source === 'preset') return toast('This server comes from a preset — rescan it in /admin', false)
+    const serverId = server.id
     setRescanningId(serverId)
     try {
       const res = await fetch(`/api/company/${company.id}/mcp-servers/${serverId}`, {
@@ -291,25 +302,44 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
     } finally { setRescanningId(null) }
   }
 
-  async function toggleMcpServer(server: McpServer) {
+  async function toggleMcpServer(server: SourcedMcpServer) {
+    if (!isAdmin) return toast('Admin key required', false)
     const next = !server.enabled
-    if (isAdmin) {
-      await fetch(`/api/company/${company.id}/mcp-servers/${server.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: next, adminKey }),
+    if (server.source === 'preset') {
+      // Presets don't carry a per-server enabled flag — "disable" means exclude it for this company.
+      await fetch(`/api/company/${company.id}/preset-exclusions`, {
+        method: next ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'mcp_server', ref_id: server.id, adminKey }),
       })
+      setMcpServers((s) => s.map((x) => x.id === server.id ? { ...x, enabled: next } : x))
+      toast(next ? `${server.name} re-enabled` : `${server.name} excluded for this company`, next)
+      return
     }
+    await fetch(`/api/company/${company.id}/mcp-servers/${server.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next, adminKey }),
+    })
     setMcpServers((s) => s.map((x) => x.id === server.id ? { ...x, enabled: next } : x))
     toast(next ? `${server.name} enabled` : `${server.name} disabled`, next)
   }
 
-  async function removeMcpServer(serverId: number) {
+  async function removeMcpServer(server: SourcedMcpServer) {
     if (!isAdmin) return toast('Admin key required', false)
+    if (server.source === 'preset') {
+      if (!confirm(`This server comes from the company's preset. Excluding it only affects this company — manage the preset itself in /admin. Continue?`)) return
+      await fetch(`/api/company/${company.id}/preset-exclusions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'mcp_server', ref_id: server.id, adminKey }),
+      })
+      setMcpServers((s) => s.filter((x) => x.id !== server.id))
+      toast('Excluded for this company')
+      return
+    }
     await fetch(`/api/company/${company.id}/mcp-servers`, {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverId, adminKey }),
+      body: JSON.stringify({ serverId: server.id, adminKey }),
     })
-    setMcpServers((s) => s.filter((x) => x.id !== serverId))
+    setMcpServers((s) => s.filter((x) => x.id !== server.id))
     toast('Server removed')
   }
 
@@ -372,6 +402,11 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
               placeholder="Module content (Markdown instructions for the agent)…"
               className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y mb-3"
               rows={6} style={{ borderColor: 'var(--border)', color: 'var(--ink)', fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} />
+            <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--ink-3)' }}>Example prompts (one per line) — shown as chips on the chat welcome screen</label>
+            <textarea value={cmPrompts} onChange={(e) => setCmPrompts(e.target.value)}
+              placeholder="Compare HPLC Purity for XB-441 across all batches"
+              className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y mb-3"
+              rows={3} style={{ borderColor: 'var(--border)', color: 'var(--ink)' }} />
             <div className="flex gap-2">
               <button onClick={addCustomModule} className="text-sm px-5 py-2 rounded-full font-semibold text-white" style={{ background: 'var(--teal)' }}>Create</button>
               <button onClick={() => setShowCustomModule(false)} className="text-sm px-4 py-2 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>Cancel</button>
@@ -388,7 +423,13 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
           <p className="text-xs mb-4" style={{ color: 'var(--ink-4)' }}>
             Check to include tool documentation in a persona. Toggle Enable/Disable to make tools available to the agent.
           </p>
-          {filteredPrefixes.length === 0 && <p className="text-sm" style={{ color: 'var(--ink-4)' }}>No results.</p>}
+          {filteredPrefixes.length === 0 && (
+            <p className="text-sm" style={{ color: 'var(--ink-4)' }}>
+              {q
+                ? 'No results.'
+                : 'No tool groups for this company\'s preset yet — add some in /admin, or unlink the preset to see the full catalog.'}
+            </p>
+          )}
           <div className="space-y-3">
             {filteredPrefixes.map((prefix) => {
               const meta = SYSTEM_META[prefix] ?? { label: prefix.toUpperCase(), description: 'Data system', owner: 'Unknown' }
@@ -432,6 +473,9 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                             style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--surface)', border: '1px solid var(--teal-soft)', color: 'var(--teal-ink)' }}>
                             {t.toolId.slice(prefix.length + 1)}
                           </code>
+                          {presetTools.has(t.toolId) && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#ede9fe', color: '#6d28d9' }}>preset</span>
+                          )}
                           <p className="text-xs" style={{ color: 'var(--ink-3)' }}>{t.description}</p>
                         </div>
                       ))}
@@ -627,6 +671,7 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                           {server.tools.length} tools
                         </span>
                         {server.enabled && <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#dcfce7', color: '#166534' }}>✓ Active</span>}
+                        {server.source === 'preset' && <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#ede9fe', color: '#6d28d9' }}>from preset</span>}
                       </div>
                       <p className="text-[10px] mt-0.5 truncate" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>{server.url}</p>
                       {server.last_scanned && (
@@ -640,17 +685,19 @@ export function MarketplaceClient({ company, enabledTools: initial, toolGroups, 
                           {isExpanded ? 'Hide' : 'View tools'}
                         </button>
                       )}
-                      <button onClick={() => rescanMcpServer(server.id)} disabled={isRescanning}
-                        className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 disabled:opacity-50"
-                        style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
-                        {isRescanning ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : '↻'} Rescan
-                      </button>
+                      {server.source !== 'preset' && (
+                        <button onClick={() => rescanMcpServer(server)} disabled={isRescanning}
+                          className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 disabled:opacity-50"
+                          style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}>
+                          {isRescanning ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : '↻'} Rescan
+                        </button>
+                      )}
                       <button onClick={() => toggleMcpServer(server)}
                         className="text-xs px-4 py-1.5 rounded-full font-semibold text-white"
                         style={{ background: server.enabled ? 'var(--ink-3)' : 'var(--teal)' }}>
                         {server.enabled ? 'Disable' : 'Enable'}
                       </button>
-                      <button onClick={() => removeMcpServer(server.id)}
+                      <button onClick={() => removeMcpServer(server)}
                         className="text-xs px-2 py-1.5 rounded-lg border transition-colors"
                         style={{ borderColor: 'var(--border)', color: 'var(--ink-3)', background: 'var(--bg)' }}
                         onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca' }}

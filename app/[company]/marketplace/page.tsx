@@ -1,8 +1,9 @@
 import { sql } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { ALL_TOOLS } from '@/tools/index'
+import { getEffectiveTools, getEffectiveMcpServers } from '@/lib/presets'
 import { MarketplaceClient } from '@/components/MarketplaceClient'
-import type { Company, Persona, Repo, RepoModule, McpServer } from '@/lib/types'
+import type { Company, Persona, Repo, RepoModule } from '@/lib/types'
 
 interface Props {
   params: Promise<{ company: string }>
@@ -29,10 +30,17 @@ export default async function MarketplacePage({ params, searchParams }: Props) {
 
   const isAdmin = !!key && key === company.admin_key
 
-  const enabledRows = await sql`
-    SELECT tool_id FROM company_tools WHERE company_id = ${slug} AND enabled = true
-  `
-  const enabledTools = enabledRows.map((r) => r.tool_id as string)
+  const effectiveTools = await getEffectiveTools(slug)
+  const enabledTools = effectiveTools.filter((t) => t.enabled).map((t) => t.tool_id)
+  const presetToolIds = new Set(effectiveTools.filter((t) => t.source === 'preset').map((t) => t.tool_id))
+
+  // When a company is linked to a preset, only show built-in tool groups that are
+  // relevant to it (in the preset, or already configured directly on the company) —
+  // keeps e.g. a finance deployment's Marketplace from being cluttered with LIMS/QMS.
+  // Companies with no preset see the full catalog, same as before presets existed.
+  const visiblePrefixes = company.preset_id
+    ? new Set(effectiveTools.map((t) => t.tool_id.split('_')[0]))
+    : null
 
   const repos = await sql`
     SELECT r.* FROM repos r
@@ -51,16 +59,18 @@ export default async function MarketplacePage({ params, searchParams }: Props) {
     SELECT id, name FROM personas WHERE company_id = ${slug} ORDER BY created_at
   ` as Pick<Persona, 'id' | 'name'>[]
 
-  const mcpServers = await sql`
-    SELECT * FROM company_mcp_servers WHERE company_id = ${slug} ORDER BY created_at
-  ` as McpServer[]
+  const mcpServers = (await getEffectiveMcpServers(slug)).sort((a, b) => a.created_at.localeCompare(b.created_at))
 
-  const toolGroups = buildToolGroups()
+  const allToolGroups = buildToolGroups()
+  const toolGroups = visiblePrefixes
+    ? Object.fromEntries(Object.entries(allToolGroups).filter(([prefix]) => visiblePrefixes.has(prefix)))
+    : allToolGroups
 
   return (
     <MarketplaceClient
       company={company}
       enabledTools={enabledTools}
+      presetToolIds={[...presetToolIds]}
       toolGroups={toolGroups}
       repos={repos}
       repoModules={repoModules}

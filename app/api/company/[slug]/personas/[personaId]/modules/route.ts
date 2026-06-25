@@ -40,12 +40,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   // Manual module creation
-  const { name, type, description, content, tokens } = body
+  const { name, type, description, content, tokens, example_prompts } = body
   if (!name?.trim()) return Response.json({ error: 'name required' }, { status: 400 })
 
   const rows = await sql`
-    INSERT INTO persona_modules (persona_id, type, name, description, content, tokens, enabled)
-    VALUES (${personaId}, ${type ?? 'skill'}, ${name.trim()}, ${description ?? null}, ${content ?? null}, ${tokens ?? null}, true)
+    INSERT INTO persona_modules (persona_id, type, name, description, content, tokens, enabled, example_prompts)
+    VALUES (${personaId}, ${type ?? 'skill'}, ${name.trim()}, ${description ?? null}, ${content ?? null}, ${tokens ?? null}, true, ${example_prompts ?? []})
     RETURNING id
   `
   return Response.json({ id: rows[0].id })
@@ -67,7 +67,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ slug:
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string; personaId: string }> }) {
   const { slug, personaId } = await params
-  const { moduleId, name, description, content, tokens, adminKey } = await req.json()
+  const { moduleId, name, description, content, tokens, example_prompts, adminKey } = await req.json()
 
   const valid = await validateAdminKey(slug, adminKey)
   const denied = requireKey(valid)
@@ -75,10 +75,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slug: 
 
   await sql`
     UPDATE persona_modules SET
-      name        = COALESCE(${name ?? null}, name),
-      description = COALESCE(${description ?? null}, description),
-      content     = ${content ?? null},
-      tokens      = COALESCE(${tokens ?? null}, tokens)
+      name             = COALESCE(${name ?? null}, name),
+      description      = COALESCE(${description ?? null}, description),
+      content          = ${content ?? null},
+      tokens           = COALESCE(${tokens ?? null}, tokens),
+      example_prompts  = COALESCE(${example_prompts ?? null}, example_prompts)
     WHERE id = ${moduleId} AND persona_id = ${personaId}
   `
   return Response.json({ ok: true })

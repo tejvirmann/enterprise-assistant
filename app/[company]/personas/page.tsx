@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { PersonasClient } from '@/components/PersonasClient'
+import { getEffectiveModules } from '@/lib/presets'
 import type { Company, Persona, PersonaModule, Repo, RepoModule } from '@/lib/types'
 
 interface Props {
@@ -26,12 +27,19 @@ export default async function PersonasPage({ params, searchParams }: Props) {
     GROUP BY p.id ORDER BY p.created_at
   ` as (Persona & { module_count: number })[]
 
-  const modules = await sql`
+  const ownModules = await sql`
     SELECT pm.* FROM persona_modules pm
     JOIN personas p ON pm.persona_id = p.id
     WHERE p.company_id = ${slug}
     ORDER BY pm.persona_id, pm.type, pm.name
   ` as PersonaModule[]
+
+  // Preset-provided modules attach only to the company's default persona.
+  const modules: (PersonaModule & { source: 'preset' | 'company' })[] = ownModules.map((m) => ({ ...m, source: 'company' }))
+  if (company.default_persona_id) {
+    const effective = await getEffectiveModules(slug, company.default_persona_id)
+    modules.push(...effective.filter((m) => m.source === 'preset'))
+  }
 
   const repos = await sql`
     SELECT r.* FROM repos r

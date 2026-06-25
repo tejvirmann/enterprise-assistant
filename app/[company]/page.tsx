@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import { sql } from '@/lib/db'
 import { CompanyStudio } from '@/components/CompanyStudio'
-import type { Company, Persona, PersonaModule, CompanyTool, BrandConfig } from '@/lib/types'
+import { getEffectiveModules, getEffectiveTools } from '@/lib/presets'
+import type { Company, Persona, CompanyTool, BrandConfig } from '@/lib/types'
 
 interface Props {
   params: Promise<{ company: string }>
@@ -22,17 +23,13 @@ async function getCompanyData(slug: string) {
   if (!personas.length) return null
   const persona = personas[0] as Persona
 
-  const modules = await sql`
-    SELECT * FROM persona_modules
-    WHERE persona_id = ${persona.id}
-    ORDER BY type, name
-  ` as PersonaModule[]
+  const modules = await getEffectiveModules(company.id, persona.id)
 
-  const tools = await sql`
-    SELECT * FROM company_tools
-    WHERE company_id = ${company.id} AND enabled = true
-    ORDER BY tool_id
-  ` as CompanyTool[]
+  const effectiveTools = await getEffectiveTools(company.id)
+  const tools = effectiveTools
+    .filter((t) => t.enabled)
+    .map((t, i) => ({ id: i, company_id: company.id, tool_id: t.tool_id, enabled: true }))
+    .sort((a, b) => a.tool_id.localeCompare(b.tool_id)) as CompanyTool[]
 
   return { company, persona, modules, tools }
 }

@@ -1,20 +1,13 @@
 import { sql } from '@/lib/db'
+import { checkAdminSecret } from '@/lib/auth'
 import type { BrandConfig } from '@/lib/types'
-
-function checkAuth(key: string | undefined): Response | null {
-  const secret = process.env.ADMIN_SECRET
-  if (!secret || key !== secret) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  return null
-}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const body = await req.json()
-  const { adminKey, name, description, color, tagline, chat_welcome, logo_url, bg, surface, border, company_admin_key } = body
+  const { adminKey, name, description, color, tagline, chat_welcome, logo_url, bg, surface, border, company_admin_key, preset_id, rate_limit_per_minute, rate_limit_per_visitor_per_minute } = body
 
-  const denied = checkAuth(adminKey)
+  const denied = checkAdminSecret(adminKey)
   if (denied) return denied
 
   const brand: BrandConfig = {}
@@ -38,6 +31,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ slug: 
     await sql`UPDATE companies SET admin_key = ${company_admin_key} WHERE id = ${slug}`
   }
 
+  if (preset_id !== undefined) {
+    await sql`UPDATE companies SET preset_id = ${preset_id || null} WHERE id = ${slug}`
+  }
+
+  if (rate_limit_per_minute !== undefined || rate_limit_per_visitor_per_minute !== undefined) {
+    await sql`
+      UPDATE companies SET
+        rate_limit_per_minute             = ${rate_limit_per_minute || null},
+        rate_limit_per_visitor_per_minute = ${rate_limit_per_visitor_per_minute || null}
+      WHERE id = ${slug}
+    `
+  }
+
   return Response.json({ ok: true })
 }
 
@@ -46,7 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const { slug } = await params
   const { adminKey, name, description } = await req.json()
 
-  const denied = checkAuth(adminKey)
+  const denied = checkAdminSecret(adminKey)
   if (denied) return denied
 
   const id = `${slug}-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`

@@ -13,9 +13,10 @@ interface Props {
 }
 
 const TABS = [
-  { label: 'Marketplace', href: (slug: string) => `/${slug}/marketplace` },
-  { label: 'Personas',    href: (slug: string) => `/${slug}/personas` },
-  { label: 'Session',     href: (slug: string) => `/${slug}` },
+  { label: 'Marketplace',  href: (slug: string) => `/${slug}/marketplace` },
+  { label: 'Personas',     href: (slug: string) => `/${slug}/personas` },
+  { label: 'Sample Data',  href: (slug: string) => `/${slug}/sample-data` },
+  { label: 'Session',      href: (slug: string) => `/${slug}` },
 ]
 
 function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props) {

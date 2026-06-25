@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { sql } from '@/lib/db'
 import { AdminClient } from '@/components/AdminClient'
+import { ALL_TOOLS } from '@/tools/index'
 import type { Company, Persona } from '@/lib/types'
+import type { Preset } from '@/lib/presets'
 
 interface Props {
   searchParams: Promise<{ key?: string }>
@@ -49,12 +51,21 @@ export default async function AdminPage({ searchParams }: Props) {
     FROM company_mcp_servers GROUP BY company_id
   ` as { company_id: string; total: number; enabled: number }[]
 
+  const presets = await sql`SELECT * FROM presets ORDER BY name` as Preset[]
+
+  const toolCatalog = Object.entries(ALL_TOOLS).map(([id, t]) => ({
+    id,
+    description: (t as { description?: string }).description ?? '',
+  }))
+
   return (
     <AdminClient
       companies={companies}
       personas={personas}
       toolCounts={toolCounts}
       mcpCounts={mcpCounts}
+      presets={presets}
+      toolCatalog={toolCatalog}
       adminKey={key}
     />
   )

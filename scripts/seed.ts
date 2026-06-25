@@ -160,9 +160,11 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS persona_modules (
       id SERIAL PRIMARY KEY, persona_id TEXT REFERENCES personas(id) ON DELETE CASCADE,
       repo_id TEXT, path TEXT, type TEXT, name TEXT,
-      description TEXT, tokens INTEGER, enabled BOOLEAN DEFAULT true, content TEXT
+      description TEXT, tokens INTEGER, enabled BOOLEAN DEFAULT true, content TEXT,
+      example_prompts TEXT[] DEFAULT '{}'
     )
   `
+  await sql`ALTER TABLE persona_modules ADD COLUMN IF NOT EXISTS example_prompts TEXT[] DEFAULT '{}'`
   await sql`
     CREATE TABLE IF NOT EXISTS company_tools (
       id SERIAL PRIMARY KEY, company_id TEXT REFERENCES companies(id),
@@ -205,6 +207,52 @@ async function createTables() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  await sql`
+    CREATE TABLE IF NOT EXISTS presets (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS preset_tools (
+      preset_id TEXT REFERENCES presets(id) ON DELETE CASCADE,
+      tool_id TEXT NOT NULL,
+      PRIMARY KEY (preset_id, tool_id)
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS preset_mcp_servers (
+      id SERIAL PRIMARY KEY,
+      preset_id TEXT REFERENCES presets(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      transport TEXT DEFAULT 'http',
+      tools JSONB DEFAULT '[]',
+      last_scanned TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS preset_modules (
+      id SERIAL PRIMARY KEY,
+      preset_id TEXT REFERENCES presets(id) ON DELETE CASCADE,
+      type TEXT, name TEXT, description TEXT, tokens INTEGER, content TEXT,
+      example_prompts TEXT[] DEFAULT '{}'
+    )
+  `
+  await sql`ALTER TABLE preset_modules ADD COLUMN IF NOT EXISTS example_prompts TEXT[] DEFAULT '{}'`
+  await sql`
+    CREATE TABLE IF NOT EXISTS company_preset_exclusions (
+      company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      ref_id TEXT NOT NULL,
+      PRIMARY KEY (company_id, kind, ref_id)
+    )
+  `
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS preset_id TEXT REFERENCES presets(id)`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS rate_limit_per_minute INTEGER`
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS rate_limit_per_visitor_per_minute INTEGER`
+
   await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

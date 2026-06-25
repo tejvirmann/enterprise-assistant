@@ -4,10 +4,12 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Company, Persona, PersonaModule, Repo, RepoModule } from '@/lib/types'
 
+type SourcedModule = PersonaModule & { source: 'preset' | 'company' }
+
 interface Props {
   company: Company & { admin_key?: string }
   personas: (Persona & { module_count: number })[]
-  modules: PersonaModule[]
+  modules: SourcedModule[]
   repos: Repo[]
   repoModules: RepoModule[]
   isAdmin: boolean
@@ -51,6 +53,7 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editContent, setEditContent] = useState('')
+  const [editPrompts, setEditPrompts] = useState('')
 
   // Manual module form
   const [nmName, setNmName] = useState('')
@@ -58,10 +61,11 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
   const [nmDesc, setNmDesc] = useState('')
   const [nmContent, setNmContent] = useState('')
   const [nmTokens, setNmTokens] = useState('')
+  const [nmPrompts, setNmPrompts] = useState('')
 
   const activePersona = personas.find((p) => p.id === activeId) ?? null
   const activeModules = modules.filter((m) => m.persona_id === activeId)
-  const groupedModules = activeModules.reduce<Record<string, PersonaModule[]>>((acc, m) => {
+  const groupedModules = activeModules.reduce<Record<string, SourcedModule[]>>((acc, m) => {
     const key = m.repo_id ?? 'custom'
     if (!acc[key]) acc[key] = []
     acc[key].push(m)
@@ -123,35 +127,41 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
     router.refresh()
   }
 
-  function startEdit(m: PersonaModule) {
+  function startEdit(m: SourcedModule) {
+    if (m.source === 'preset') return toast('Edit this module in /admin — it comes from the company\'s preset', false)
     setEditingModuleId(m.id)
     setEditName(m.name)
     setEditDesc(m.description ?? '')
     setEditContent(m.content ?? '')
+    setEditPrompts((m.example_prompts ?? []).join('\n'))
   }
 
   async function saveEdit() {
     if (!editingModuleId || !activeId) return
+    if (!isAdmin) return toast('Admin key required to save', false)
+    const example_prompts = editPrompts.split('\n').map((s) => s.trim()).filter(Boolean)
     const res = await fetch(`/api/company/${company.id}/personas/${activeId}/modules`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ moduleId: editingModuleId, name: editName, description: editDesc, content: editContent, adminKey }),
+      body: JSON.stringify({ moduleId: editingModuleId, name: editName, description: editDesc, content: editContent, example_prompts, adminKey }),
     })
-    if (!res.ok) return toast('Failed to save', false)
+    if (!res.ok) return toast(res.status === 403 ? 'Admin key required' : 'Failed to save', false)
     setModules((mods) => mods.map((m) =>
-      m.id === editingModuleId ? { ...m, name: editName, description: editDesc || null, content: editContent || null } : m
+      m.id === editingModuleId ? { ...m, name: editName, description: editDesc || null, content: editContent || null, example_prompts } : m
     ))
     setEditingModuleId(null)
-    toast('Module saved' + (!isAdmin ? ' (session only)' : ''))
-    if (isAdmin) router.refresh()
+    toast('Module saved')
+    router.refresh()
   }
 
   async function toggleRepoModule(repoId: string, path: string) {
+    if (!isAdmin) return toast('Admin key required', false)
     const existing = activeModules.find((m) => m.repo_id === repoId && m.path === path)
     if (existing) {
-      await fetch(`/api/company/${company.id}/personas/${activeId}/modules`, {
+      const res = await fetch(`/api/company/${company.id}/personas/${activeId}/modules`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ moduleId: existing.id, adminKey }),
       })
+      if (!res.ok) return toast(res.status === 403 ? 'Admin key required' : 'Failed to remove', false)
       setModules((m) => m.filter((x) => x.id !== existing.id))
       setPersonas((p) => p.map((x) => x.id === activeId ? { ...x, module_count: Math.max(0, x.module_count - 1) } : x))
     } else {
@@ -159,10 +169,10 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repo_id: repoId, path, adminKey }),
       })
-      if (!res.ok) return toast('Failed to add', false)
+      if (!res.ok) return toast(res.status === 403 ? 'Admin key required' : 'Failed to add', false)
       const { id } = await res.json()
       const rm = repoModules.find((m) => m.repo_id === repoId && m.path === path)!
-      setModules((m) => [...m, { id, persona_id: activeId!, repo_id: repoId, path, type: rm.type, name: rm.name, description: rm.description, tokens: rm.tokens, enabled: true, content: rm.content }])
+      setModules((m) => [...m, { id, persona_id: activeId!, repo_id: repoId, path, type: rm.type, name: rm.name, description: rm.description, tokens: rm.tokens, enabled: true, content: rm.content, example_prompts: [], source: 'company' }])
       setPersonas((p) => p.map((x) => x.id === activeId ? { ...x, module_count: x.module_count + 1 } : x))
     }
   }
@@ -175,29 +185,42 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
 
   async function addManualModule() {
     if (!nmName.trim() || !activeId) return toast('Name required', false)
+    if (!isAdmin) return toast('Add ?key=xxx to the URL to create a module', false)
+    const example_prompts = nmPrompts.split('\n').map((s) => s.trim()).filter(Boolean)
     const res = await fetch(`/api/company/${company.id}/personas/${activeId}/modules`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nmName, type: nmType, description: nmDesc, content: nmContent, tokens: nmTokens ? parseInt(nmTokens) : null, adminKey }),
+      body: JSON.stringify({ name: nmName, type: nmType, description: nmDesc, content: nmContent, tokens: nmTokens ? parseInt(nmTokens) : null, example_prompts, adminKey }),
     })
-    if (!res.ok) return toast('Failed', false)
+    if (!res.ok) return toast('Failed to add module', false)
     const { id } = await res.json()
-    setModules((m) => [...m, { id, persona_id: activeId, repo_id: null, path: null, type: nmType, name: nmName, description: nmDesc || null, tokens: nmTokens ? parseInt(nmTokens) : null, enabled: true, content: nmContent || null }])
+    setModules((m) => [...m, { id, persona_id: activeId, repo_id: null, path: null, type: nmType, name: nmName, description: nmDesc || null, tokens: nmTokens ? parseInt(nmTokens) : null, enabled: true, content: nmContent || null, example_prompts, source: 'company' }])
     setPersonas((p) => p.map((x) => x.id === activeId ? { ...x, module_count: x.module_count + 1 } : x))
-    setNmName(''); setNmType('skill'); setNmDesc(''); setNmContent(''); setNmTokens('')
+    setNmName(''); setNmType('skill'); setNmDesc(''); setNmContent(''); setNmTokens(''); setNmPrompts('')
     setView('detail')
-    toast('Module added' + (!isAdmin ? ' (session only)' : ''))
-    if (isAdmin) router.refresh()
+    toast('Module added')
+    router.refresh()
   }
 
-  async function removeModule(moduleId: number) {
+  async function removeModule(m: SourcedModule) {
+    if (!isAdmin) return toast('Admin key required', false)
+    if (m.source === 'preset') {
+      if (!confirm('This module comes from the company\'s preset. Excluding it only affects this company — manage the preset itself in /admin. Continue?')) return
+      await fetch(`/api/company/${company.id}/preset-exclusions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'module', ref_id: m.id, adminKey }),
+      })
+      setModules((mods) => mods.filter((x) => x !== m))
+      toast('Excluded for this company')
+      return
+    }
     await fetch(`/api/company/${company.id}/personas/${activeId}/modules`, {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ moduleId, adminKey }),
+      body: JSON.stringify({ moduleId: m.id, adminKey }),
     })
-    setModules((m) => m.filter((x) => x.id !== moduleId))
+    setModules((mods) => mods.filter((x) => x.id !== m.id))
     setPersonas((p) => p.map((x) => x.id === activeId ? { ...x, module_count: Math.max(0, x.module_count - 1) } : x))
     toast('Removed')
-    if (isAdmin) router.refresh()
+    router.refresh()
   }
 
   // suppress unused warning for useCallback import
@@ -363,6 +386,11 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
                 placeholder="Module content (Markdown) — instructions the agent will follow…"
                 className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y mb-3"
                 rows={10} style={{ borderColor: 'var(--border)', color: 'var(--ink)', fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} />
+              <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--ink-3)' }}>Example prompts (one per line) — shown as chips on the chat welcome screen</label>
+              <textarea value={nmPrompts} onChange={(e) => setNmPrompts(e.target.value)}
+                placeholder="Compare HPLC Purity for XB-441 across all batches"
+                className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y mb-3"
+                rows={3} style={{ borderColor: 'var(--border)', color: 'var(--ink)' }} />
               <div className="flex gap-2">
                 <button onClick={addManualModule} className="text-sm px-5 py-2 rounded-full font-semibold text-white" style={{ background: 'var(--teal)' }}>Add Module</button>
                 <button onClick={() => setView('detail')} className="text-sm px-4 py-2 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>Cancel</button>
@@ -430,6 +458,11 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
                               placeholder="Module content (Markdown instructions for the agent)…"
                               className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y"
                               rows={8} style={{ borderColor: 'var(--border)', color: 'var(--ink)', fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} />
+                            <label className="text-[10px] font-medium block" style={{ color: 'var(--ink-4)' }}>Example prompts (one per line)</label>
+                            <textarea value={editPrompts} onChange={(e) => setEditPrompts(e.target.value)}
+                              placeholder="Compare HPLC Purity for XB-441 across all batches"
+                              className="w-full text-sm px-3 py-2 rounded-lg border outline-none resize-y"
+                              rows={3} style={{ borderColor: 'var(--border)', color: 'var(--ink)' }} />
                             <div className="flex gap-2 pt-1">
                               <button onClick={saveEdit} className="text-xs px-4 py-1.5 rounded-full font-semibold text-white" style={{ background: 'var(--teal)' }}>Save</button>
                               <button onClick={() => setEditingModuleId(null)} className="text-xs px-3 py-1.5 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>Cancel</button>
@@ -439,7 +472,12 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
                           <div className="flex items-start gap-3 p-4">
                             <span className={`${TYPE_COLORS[m.type] ?? 'bg-slate-100 text-slate-600'} text-[9px] font-medium tracking-[.06em] uppercase px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5`} style={{ fontFamily: 'var(--font-mono, monospace)' }}>{m.type}</span>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{m.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{m.name}</span>
+                                {m.source === 'preset' && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ fontFamily: 'var(--font-mono, monospace)', background: '#ede9fe', color: '#6d28d9' }}>from preset</span>
+                                )}
+                              </div>
                               {m.description && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{m.description}</p>}
                               {m.tokens && <span className="text-[10px]" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>~{m.tokens.toLocaleString()} tokens</span>}
                               {m.content && (
@@ -456,7 +494,7 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
                                 onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-4)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent' }}>
                                 Edit
                               </button>
-                              <button onClick={() => removeModule(m.id)}
+                              <button onClick={() => removeModule(m)}
                                 className="text-[10px] px-2 py-1 rounded transition-colors"
                                 style={{ color: 'var(--ink-4)', background: 'transparent' }}
                                 onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fef2f2' }}

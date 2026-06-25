@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { ConfigPanel } from './ConfigPanel'
 import { Chat } from './Chat'
 import type { CompanyData } from '@/lib/types'
@@ -41,6 +41,13 @@ export function CompanyStudio({ data, chatWelcome }: Props) {
 
   const relaunch = useCallback(() => setChatKey((k) => k + 1), [])
 
+  const suggestions = useMemo(() => {
+    const prompts = modules
+      .filter((m) => activeModuleIds.includes(m.id))
+      .flatMap((m) => m.example_prompts ?? [])
+    return [...new Set(prompts)].slice(0, 6)
+  }, [modules, activeModuleIds])
+
   return (
     <div className="flex h-full min-h-0">
       {sidebarOpen && (
@@ -75,6 +82,7 @@ export function CompanyStudio({ data, chatWelcome }: Props) {
           activeToolIds={activeToolIds}
           activeModuleIds={activeModuleIds}
           welcomeMessage={chatWelcome}
+          suggestions={suggestions.length ? suggestions : undefined}
         />
       </div>
     </div>

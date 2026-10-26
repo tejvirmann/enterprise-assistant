@@ -217,7 +217,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
   const activeSuggestions = suggestions ?? DEFAULT_SUGGESTIONS
 
   return (
-    <div className="flex flex-col h-full min-h-0 relative" style={{ background: 'var(--bg)' }}>
+    <div className="flex flex-col h-full min-h-0 relative" style={{ background: 'transparent' }}>
       {/* Messages */}
       <div
         ref={scrollRef}
@@ -234,10 +234,10 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
                 <button
                   key={s}
                   onClick={() => setInput(s)}
-                  className="text-left text-xs rounded-lg px-3.5 py-2.5 border transition-all"
-                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--ink-3)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal-ink)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--ink-3)' }}
+                  className="text-left text-[13px] px-3.5 py-3 transition-all"
+                  style={{ background: 'var(--surface)', border: '1.5px solid var(--ink)', boxShadow: 'var(--hard)', color: 'var(--ink-2)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '5px 5px 0 var(--brand)'; e.currentTarget.style.transform = 'translate(-1px,-1px)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'var(--hard)'; e.currentTarget.style.transform = '' }}
                 >
                   {s}
                 </button>
@@ -251,8 +251,8 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             return (
               <div key={m.id} className="flex justify-end">
                 <div
-                  className="max-w-[72%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm font-medium"
-                  style={{ background: brandColor, color: '#fff' }}
+                  className="max-w-[72%] px-4 py-2.5 text-sm"
+                  style={{ background: 'var(--ink)', color: '#fff', boxShadow: 'var(--hard)' }}
                 >
                   {m.content}
                 </div>
@@ -269,24 +269,25 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
           const { thinking, response } = parseThinking(textContent)
 
           return (
-            <div key={m.id} className="space-y-1 pl-6">
+            <div key={m.id} className="space-y-1 p-4" style={{ background: 'var(--surface)', border: '2px solid var(--ink)', boxShadow: '6px 6px 0 var(--tint)' }}>
               {toolParts.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
+                <div className="flex flex-col gap-1.5 mb-3">
                   {toolParts.map((part, i) => {
                     if (part.type !== 'tool-invocation') return null
+                    const done = part.toolInvocation.state === 'result'
+                    const [server, ...rest] = part.toolInvocation.toolName.split('_')
+                    const args = JSON.stringify(part.toolInvocation.args ?? {}).replace(/[{}"]/g, '').replace(/:/g, '=').replace(/,/g, ' · ')
                     return (
-                      <span
+                      <div
                         key={i}
-                        className="inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border"
-                        style={{
-                          fontFamily: 'var(--font-mono, monospace)',
-                          background: part.toolInvocation.state === 'result' ? 'var(--teal-softer)' : 'var(--surface-2)',
-                          borderColor: part.toolInvocation.state === 'result' ? 'var(--teal-soft)' : 'var(--border)',
-                          color: part.toolInvocation.state === 'result' ? 'var(--teal-ink)' : 'var(--ink-4)',
-                        }}
+                        className="flex items-center gap-2.5 px-2.5 py-1.5 text-[12px]"
+                        style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--teal-softer)', border: '1.5px solid var(--border)' }}
                       >
-                        {part.toolInvocation.state === 'result' ? '✓' : '…'} {part.toolInvocation.toolName}
-                      </span>
+                        <span className="px-1.5 text-[10px] tracking-[.08em] uppercase" style={{ background: 'var(--ink)', color: '#fff' }}>{server}</span>
+                        <b className="font-medium">{rest.join('_') || server}</b>
+                        <span className="flex-1 truncate" style={{ color: 'var(--ink-3)' }}>{args}</span>
+                        <span style={{ color: done ? 'var(--success)' : 'var(--ink-4)' }}>{done ? '✓ done' : '…'}</span>
+                      </div>
                     )
                   })}
                 </div>
@@ -325,8 +326,8 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             const el = scrollRef.current
             if (el) el.scrollTop = el.scrollHeight
           }}
-          className="absolute bottom-[72px] right-8 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border shadow-md transition-all z-10"
-          style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--ink-3)' }}
+          className="absolute bottom-[84px] right-8 flex items-center gap-1.5 text-xs px-3 py-1.5 transition-all z-10"
+          style={{ background: 'var(--surface)', border: '1.5px solid var(--ink)', boxShadow: 'var(--sh)', color: 'var(--ink-2)' }}
         >
           ↓ Latest
         </button>
@@ -334,10 +335,9 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
 
       {/* Input bar */}
       <div
-        className="flex-shrink-0 border-t px-8 py-4 max-w-4xl mx-auto w-full"
-        style={{ borderColor: 'var(--border)' }}
+        className="flex-shrink-0 px-8 py-4 max-w-4xl mx-auto w-full"
       >
-        <form onSubmit={onSubmit} className="flex items-center gap-3">
+        <form onSubmit={onSubmit} className="flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--surface)', border: '2px solid var(--ink)', boxShadow: '4px 4px 0 var(--tint)' }}>
           <span
             className="text-sm font-semibold flex-shrink-0 select-none"
             style={{ color: brandColor, fontFamily: 'var(--font-mono, monospace)' }}
@@ -347,7 +347,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
           <input
             value={input}
             onChange={handleInputChange}
-            placeholder={isLoading ? 'Type to steer, or ESC to stop…' : 'Ask anything…'}
+            placeholder={isLoading ? 'Type to steer, or ESC to stop…' : 'Ask about your data…'}
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--ink)', caretColor: brandColor }}
           />
@@ -355,12 +355,8 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             <button
               type="button"
               onClick={() => stop()}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 transition-opacity hover:opacity-80"
-              style={{
-                background: 'rgba(220,38,38,.08)',
-                color: '#dc2626',
-                border: '1px solid rgba(220,38,38,.25)',
-              }}
+              className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 transition-opacity hover:opacity-80"
+              style={{ background: '#fff', color: 'var(--danger)', border: '1.5px solid var(--danger)' }}
             >
               <span className="w-2 h-2 rounded-sm inline-block" style={{ background: '#dc2626' }} />
               Stop
@@ -369,8 +365,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             <button
               type="submit"
               disabled={!input.trim()}
-              className="px-4 py-1.5 rounded-full text-xs font-semibold text-white disabled:opacity-40 transition-opacity hover:opacity-90 flex-shrink-0"
-              style={{ background: brandColor }}
+              className="hard-btn px-4 py-1.5 text-xs flex-shrink-0"
             >
               Send
             </button>
@@ -381,7 +376,9 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             ↵ send to stop & steer
           </p>
         )}
-        <div className="mt-1.5 h-px" style={{ background: 'var(--border)' }} />
+        <p className="mt-2 text-[10.5px] flex gap-4" style={{ color: 'var(--ink-4)', fontFamily: 'var(--font-mono, monospace)' }}>
+          <span>ESC to stop</span><span>Send while it works to steer</span>
+        </p>
       </div>
     </div>
   )

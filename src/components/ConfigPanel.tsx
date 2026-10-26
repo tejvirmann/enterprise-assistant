@@ -8,25 +8,13 @@ const SYSTEM_META: Record<string, { label: string; description: string }> = {
   rosetta: { label: 'Rosetta', description: 'Data Normalization & Translation' },
 }
 
-const TYPE_BADGE: Record<string, string> = {
-  skill:     'bg-[#e6f1ef] text-[#15716a]',
-  blueprint: 'bg-purple-50 text-purple-700',
-  agent:     'bg-green-50 text-green-700',
-  command:   'bg-amber-50 text-amber-700',
-}
 
 function Toggle({ active, onChange }: { active: boolean; onChange: () => void }) {
   return (
-    <label className="relative cursor-pointer flex-shrink-0" style={{ width: 34, height: 18 }}>
+    <label className="relative cursor-pointer flex-shrink-0" style={{ width: 34, height: 18 }} onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" checked={active} onChange={onChange} className="sr-only" />
-      <span
-        className="absolute inset-0 rounded-full transition-colors duration-200"
-        style={{ background: active ? 'var(--teal)' : '#cbd5e1' }}
-      />
-      <span
-        className="absolute top-[3px] w-3 h-3 rounded-full bg-white transition-transform duration-200"
-        style={{ transform: active ? 'translateX(19px)' : 'translateX(3px)' }}
-      />
+      <span className="absolute inset-0 transition-colors duration-150" style={{ background: active ? 'var(--teal)' : 'var(--border)', border: '1.5px solid var(--ink)' }} />
+      <span className="absolute top-[3px] w-3 h-3 transition-transform duration-150" style={{ background: active ? '#fff' : 'var(--ink)', transform: active ? 'translateX(19px)' : 'translateX(3px)' }} />
     </label>
   )
 }
@@ -34,10 +22,10 @@ function Toggle({ active, onChange }: { active: boolean; onChange: () => void })
 function StepLabel({ n, children }: { n: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 mb-3">
-      <span className="w-5 h-px opacity-50" style={{ background: 'var(--teal)' }} />
+      <span className="w-6 h-[2px]" style={{ background: 'var(--teal)' }} />
       <span
         className="text-[10px] font-medium tracking-[.16em] uppercase"
-        style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--teal)' }}
+        style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-3)' }}
       >
         {n} · {children}
       </span>
@@ -82,18 +70,18 @@ export function ConfigPanel({
   return (
     <aside
       className="flex flex-col flex-shrink-0 border-r overflow-hidden"
-      style={{ width: 320, background: 'var(--surface)', borderColor: 'var(--border)' }}
+      style={{ width: 344, background: 'var(--surface)', borderRight: '2px solid var(--ink)' }}
     >
       {/* Persona header */}
       <div
         className="px-5 py-4 flex-shrink-0 border-b"
-        style={{ borderColor: 'var(--border)', borderLeftWidth: 3, borderLeftColor: 'var(--brand)' }}
+        style={{ borderColor: 'var(--border)', background: 'var(--teal-softer)' }}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{persona.name}</div>
+            <div className="text-[17px] font-semibold" style={{ color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>{persona.name}</div>
             {persona.description && (
-              <div className="text-[11px] mt-1" style={{ color: 'var(--ink-3)' }}>{persona.description}</div>
+              <div className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink-3)' }}>{persona.description}</div>
             )}
             <div
               className="text-[10px] mt-1.5 tracking-[.04em]"
@@ -101,7 +89,7 @@ export function ConfigPanel({
             >
               {company.name} · {activeModuleIds.length} mod · {activeToolIds.length} tools
             </div>
-            <div className="mt-1.5 text-[9px] px-1.5 py-0.5 rounded w-fit tracking-[.08em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', background: 'rgba(255,255,255,.6)', color: 'var(--ink-4)' }}>
+            <div className="mt-2 text-[9.5px] px-1.5 py-0.5 w-fit tracking-[.08em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink-3)' }}>
               Session config — temporary
             </div>
           </div>
@@ -125,21 +113,20 @@ export function ConfigPanel({
           <div className="space-y-2">
             {modules.map((m) => {
               const active = activeModuleIds.includes(m.id)
-              const badgeCls = TYPE_BADGE[m.type] ?? 'bg-slate-100 text-slate-600'
               return (
                 <div
                   key={m.id}
-                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border cursor-pointer transition-all"
+                  className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer transition-all"
                   style={{
-                    background: active ? 'var(--teal-softer)' : 'var(--surface)',
-                    borderColor: active ? 'var(--teal)' : 'var(--border)',
-                    borderLeftWidth: active ? 3 : 1,
-                    opacity: active ? 1 : 0.5,
+                    background: 'var(--surface)',
+                    border: `1.5px solid ${active ? 'var(--ink)' : 'var(--border)'}`,
+                    boxShadow: active ? 'var(--sh)' : 'none',
+                    opacity: active ? 1 : 0.6,
                   }}
                   onClick={() => onToggleModule(m.id)}
                 >
-                  <span className={`${badgeCls} text-[9px] font-medium tracking-[.06em] uppercase px-2 py-0.5 rounded-full flex-shrink-0`}
-                    style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                  <span className="text-[9.5px] font-medium tracking-[.08em] uppercase px-1.5 py-0.5 flex-shrink-0 order-last"
+                    style={{ fontFamily: 'var(--font-mono, monospace)', background: 'var(--teal-softer)', color: 'var(--teal-ink)', border: '1px solid var(--teal-soft)' }}>
                     {m.type}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -171,17 +158,17 @@ export function ConfigPanel({
               return (
                 <div
                   key={prefix}
-                  className="rounded-lg border overflow-hidden"
+                  className="overflow-hidden"
                   style={{
-                    borderColor: active ? 'var(--teal)' : 'var(--border)',
-                    borderLeftWidth: active ? 3 : 1,
+                    border: `1.5px solid ${active ? 'var(--ink)' : 'var(--border)'}`,
+                    boxShadow: active ? 'var(--sh)' : 'none',
                   }}
                 >
                   <div
                     className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer transition-colors"
                     style={{
-                      background: active ? 'var(--teal-softer)' : 'var(--surface)',
-                      opacity: active ? 1 : 0.5,
+                      background: 'var(--surface)',
+                      opacity: active ? 1 : 0.6,
                     }}
                     onClick={() => onToggleServer(prefix)}
                   >
@@ -206,7 +193,7 @@ export function ConfigPanel({
                       {stools.map((t) => (
                         <span
                           key={t.tool_id}
-                          className="text-[9px] tracking-[.04em] px-1.5 py-0.5 rounded-full border"
+                          className="text-[10px] tracking-[.02em] px-1.5 py-0.5 border"
                           style={{
                             fontFamily: 'var(--font-mono, monospace)',
                             background: 'var(--surface)',
@@ -227,7 +214,7 @@ export function ConfigPanel({
       </div>
 
       {/* Footer */}
-      <div className="flex-shrink-0 border-t" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex-shrink-0" style={{ borderTop: '2px solid var(--ink)' }}>
         {/* Token bar */}
         <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between mb-1.5">
@@ -241,9 +228,9 @@ export function ConfigPanel({
               <strong style={{ color: 'var(--ink)' }}>{tokenTotal.toLocaleString()}</strong> tokens
             </span>
           </div>
-          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+          <div className="h-1.5 overflow-hidden" style={{ background: 'var(--border)' }}>
             <div
-              className="h-full rounded-full transition-all duration-300"
+              className="h-full transition-all duration-300"
               style={{
                 width: `${tokenPct}%`,
                 background: tokenPct > 90 ? 'var(--danger)' : tokenPct > 70 ? 'var(--warn)' : 'var(--teal)',
@@ -255,8 +242,7 @@ export function ConfigPanel({
         <div className="p-4">
           <button
             onClick={onRelaunch}
-            className="w-full py-2.5 rounded-full text-sm font-semibold text-white tracking-[.01em] transition-opacity hover:opacity-90"
-            style={{ background: 'var(--brand)' }}
+            className="hard-btn w-full py-2.5 text-sm tracking-[.01em]"
           >
             New Session →
           </button>

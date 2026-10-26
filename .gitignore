@@ -21,3 +21,9 @@ npm-debug.log*
 # database files
 *.db
 *.sqlite
+
+# Planning notes + voice spike (contains infra details), design mockups
+v3/
+mockups/*
+!mockups/final/
+*.tsbuildinfo

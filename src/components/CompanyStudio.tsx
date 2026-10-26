@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ConfigPanel } from './ConfigPanel'
 import { Chat } from './Chat'
 import type { CompanyData } from '@/lib/types'
@@ -21,6 +21,11 @@ export function CompanyStudio({ data, chatWelcome }: Props) {
   )
   const [chatKey, setChatKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // On phones the panel is a full-screen drawer, so start with the chat showing.
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 800px)').matches) setSidebarOpen(false)
+  }, [])
 
   const toggleModule = useCallback((id: number) => {
     setActiveModuleIds((prev) =>
@@ -61,7 +66,7 @@ export function CompanyStudio({ data, chatWelcome }: Props) {
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
-            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 transition-colors"
+            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 transition-colors max-md:text-sm max-md:py-2"
             style={{ border: '1.5px solid var(--ink)', boxShadow: 'var(--sh)', background: 'var(--surface)', color: 'var(--ink-2)' }}
             title="Show panel"
           >

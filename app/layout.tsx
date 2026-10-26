@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { IBM_Plex_Sans, IBM_Plex_Mono, Space_Grotesk } from 'next/font/google'
 import './globals.css'
+import { defaultBrandCss } from '@/lib/brand'
 
 const sans = IBM_Plex_Sans({ subsets: ['latin'], variable: '--font-sans', weight: ['400', '500', '600'] })
 const mono = IBM_Plex_Mono({ subsets: ['latin'], variable: '--font-mono', weight: ['400', '500'] })
@@ -18,6 +19,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable} ${display.variable}`}>
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: `:root{${defaultBrandCss()}}` }} />
+      </head>
       <body>{children}</body>
     </html>
   )

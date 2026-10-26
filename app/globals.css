@@ -65,3 +65,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Config panel: fixed-width sidebar on desktop, full-screen drawer under the header on phones. */
+.ea-side { width: 344px; }
+@media (max-width: 800px) {
+  .ea-side { position: fixed; inset: 56px 0 0 0; width: 100% !important; z-index: 30; border-right: 0 !important; }
+  /* page content: tighter gutters, tables scroll instead of widening the page */
+  table { display: block; overflow-x: auto; }
+  input, textarea, select { font-size: 16px; } /* stops iOS zooming into fields */
+}

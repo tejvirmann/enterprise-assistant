@@ -9,7 +9,8 @@ export interface BrandConfig {
 }
 
 function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
+  let h = hex.replace('#', '')
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('')
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
 }
 

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { sql } from '@/lib/db'
 import { CompanyNav } from '@/components/CompanyNav'
 import { buildThemeCss, type BrandConfig } from '@/lib/theme'
+import { companyColor } from '@/lib/brand'
 
 interface Props {
   children: React.ReactNode
@@ -18,7 +19,8 @@ export default async function CompanyLayout({ children, params }: Props) {
 
   const company = rows[0]
   const cfg = (company.brand_config ?? {}) as BrandConfig
-  const themeCss = buildThemeCss(company.color as string, cfg)
+  const color = companyColor(slug, company.color as string)
+  const themeCss = buildThemeCss(color, cfg)
 
   return (
     <div className="flex flex-col h-screen">
@@ -27,7 +29,7 @@ export default async function CompanyLayout({ children, params }: Props) {
       <CompanyNav
         slug={company.id as string}
         name={company.name as string}
-        color={company.color as string}
+        color={color}
         tagline={cfg.tagline}
         logoUrl={cfg.logo_url}
       />

@@ -1,0 +1,3 @@
+# Company demo environments are private working tools, not public pages.
+User-agent: *
+Disallow: /

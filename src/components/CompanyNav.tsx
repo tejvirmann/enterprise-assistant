@@ -13,12 +13,30 @@ interface Props {
 }
 
 const TABS = [
-  { label: 'Marketplace', href: (slug: string) => `/${slug}/marketplace` },
-  { label: 'Personas',    href: (slug: string) => `/${slug}/personas` },
-  { label: 'Session',     href: (slug: string) => `/${slug}` },
+  { label: 'Marketplace',  href: (slug: string) => `/${slug}/marketplace` },
+  { label: 'Personas',     href: (slug: string) => `/${slug}/personas` },
+  { label: 'Sample Data',  href: (slug: string) => `/${slug}/sample-data` },
+  { label: 'Session',      href: (slug: string) => `/${slug}` },
 ]
 
-function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props) {
+const MONO = { fontFamily: 'var(--font-mono, monospace)' }
+
+function Mark({ name, logoUrl }: { name: string; logoUrl?: string }) {
+  if (logoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={logoUrl} alt={name} style={{ height: 30, width: 30, objectFit: 'cover', border: '1.5px solid var(--ink)', boxShadow: '3px 3px 0 var(--tint)' }} />
+  }
+  return (
+    <div
+      className="grid place-items-center font-bold"
+      style={{ width: 30, height: 30, background: 'var(--brand)', color: 'var(--on-accent)', border: '1.5px solid var(--ink)', boxShadow: '3px 3px 0 var(--tint)', fontFamily: 'var(--font-display)', fontSize: 15 }}
+    >
+      {name.charAt(0)}
+    </div>
+  )
+}
+
+function NavInner({ slug, name, tagline = 'by MadStack', logoUrl }: Props) {
   const pathname = usePathname()
   const params = useSearchParams()
   const key = params.get('key')
@@ -33,44 +51,29 @@ function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props
 
   return (
     <header
-      className="flex items-center gap-8 px-7 flex-shrink-0 border-b border-white/10"
-      style={{ background: color, height: 54 }}
+      className="flex items-center gap-7 px-5 flex-shrink-0 relative z-20"
+      style={{ background: 'var(--surface)', height: 56, borderBottom: '2px solid var(--ink)' }}
     >
-      {/* Brand */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        {logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoUrl}
-            alt={name}
-            style={{ height: 34, width: 34, borderRadius: 7, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.2), 0 2px 6px rgba(0,0,0,0.18)' }}
-          />
-        )}
+        <Mark name={name} logoUrl={logoUrl} />
         <div className="flex flex-col leading-tight">
-          <span className="text-white font-bold text-[15px] tracking-tight">{name}</span>
-          <span
-            className="text-[10px] font-medium tracking-[.08em] opacity-50"
-            style={{ fontFamily: 'var(--font-mono, monospace)', color: '#fff' }}
-          >
-            {tagline}
-          </span>
+          <span className="text-[15px] font-semibold" style={{ fontFamily: 'var(--font-display)', letterSpacing: '-.01em' }}>{name}</span>
+          <span className="text-[10px] font-medium tracking-[.1em] uppercase" style={{ ...MONO, color: 'var(--ink-3)' }}>{tagline}</span>
         </div>
       </div>
 
-      {/* Tabs */}
       <nav className="flex h-full">
         {TABS.map((tab) => {
-          const href = tab.href(slug) + keyParam
           const active = isActive(tab.href(slug))
           return (
             <Link
               key={tab.label}
-              href={href}
-              className="flex items-center px-4 text-[13px] font-medium border-b-2 transition-colors"
+              href={tab.href(slug) + keyParam}
+              className="flex items-center px-4 text-[14px] font-medium transition-colors"
               style={{
-                height: 54,
-                color: active ? '#fff' : 'rgba(255,255,255,.45)',
-                borderBottomColor: active ? 'rgba(255,255,255,0.85)' : 'transparent',
+                color: active ? 'var(--ink)' : 'var(--ink-3)',
+                borderBottom: `3px solid ${active ? 'var(--brand)' : 'transparent'}`,
+                marginBottom: -2,
               }}
             >
               {tab.label}
@@ -79,30 +82,14 @@ function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props
         })}
       </nav>
 
-      {/* Right: admin badge + status */}
       <div className="ml-auto flex items-center gap-3">
         {isAdmin && (
-          <span
-            className="text-[10px] font-medium tracking-[.08em] uppercase px-2.5 py-1 rounded-full border"
-            style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              background: 'rgba(250,204,21,.2)',
-              color: '#fde047',
-              borderColor: 'rgba(250,204,21,.4)',
-            }}
-          >
+          <span className="text-[10.5px] font-medium tracking-[.1em] uppercase px-2.5 py-1" style={{ ...MONO, background: '#fff3c4', border: '1.5px solid var(--ink)' }}>
             Admin
           </span>
         )}
-        <span
-          className="text-[10px] font-medium tracking-[.08em] uppercase px-2.5 py-1 rounded-full border"
-          style={{
-            fontFamily: 'var(--font-mono, monospace)',
-            background: 'rgba(255,255,255,.12)',
-            color: 'rgba(255,255,255,.8)',
-            borderColor: 'rgba(255,255,255,.2)',
-          }}
-        >
+        <span className="flex items-center gap-1.5 text-[10.5px] font-medium tracking-[.1em] uppercase px-2.5 py-1" style={{ ...MONO, background: 'var(--tint)', border: '1.5px solid var(--ink)' }}>
+          <i className="block w-[7px] h-[7px]" style={{ background: 'var(--success)' }} />
           Active
         </span>
       </div>
@@ -113,17 +100,8 @@ function NavInner({ slug, name, color, tagline = 'by MadStack', logoUrl }: Props
 export function CompanyNav(props: Props) {
   return (
     <Suspense fallback={
-      <header
-        className="flex items-center px-7 flex-shrink-0 border-b border-white/10"
-        style={{ background: props.color, height: 54 }}
-      >
-        <div className="flex items-center gap-3">
-          {props.logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={props.logoUrl} alt={props.name} style={{ height: 34, width: 34, borderRadius: 7 }} />
-          )}
-          <span className="text-white font-bold text-[15px] tracking-tight">{props.name}</span>
-        </div>
+      <header className="flex items-center px-5 flex-shrink-0" style={{ background: 'var(--surface)', height: 56, borderBottom: '2px solid var(--ink)' }}>
+        <div className="flex items-center gap-3"><Mark name={props.name} logoUrl={props.logoUrl} /><span className="text-[15px] font-semibold">{props.name}</span></div>
       </header>
     }>
       <NavInner {...props} />

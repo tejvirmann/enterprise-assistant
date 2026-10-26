@@ -57,12 +57,12 @@ export function CompanyStudio({ data, chatWelcome }: Props) {
           onCollapse={() => setSidebarOpen(false)}
         />
       )}
-      <div className="flex-1 min-w-0 relative" style={{ background: 'var(--bg)' }}>
+      <div className="flex-1 min-w-0 relative" style={{ background: 'transparent' }}>
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
-            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors"
-            style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--ink-3)' }}
+            className="absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs px-2.5 py-1.5 transition-colors"
+            style={{ border: '1.5px solid var(--ink)', boxShadow: 'var(--sh)', background: 'var(--surface)', color: 'var(--ink-2)' }}
             title="Show panel"
           >
             <span style={{ fontSize: 10 }}>▶</span> Panel

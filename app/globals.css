@@ -2,50 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens. The accent set (--brand, --teal*, --tint, --dotrgb, --on-accent) is overridden per
+   company by buildThemeCss(); everything else is fixed so all companies share one look. */
 :root {
-  --indigo:      #212154;
-  --indigo-mid:  #2d2d6e;
-  --teal:        #369996;
-  --teal-ink:    #15716a;
-  --teal-soft:   #e6f1ef;
-  --teal-softer: #f3f8f7;
+  --ink:   #141922;
+  --ink-2: #3a4250;
+  --ink-3: #6a7280;
+  --ink-4: #9aa1ad;
 
-  --ink:   #0f1a1a;
-  --ink-2: #2b3838;
-  --ink-3: #5c6b6a;
-  --ink-4: #8a9796;
+  --bg:        #f6f7f8;
+  --surface:   #ffffff;
+  --surface-2: #f6f7f8;
+  --border:    #e3e6ea;
+  --border-2:  #eef0f2;
+  --line:      #141922;
 
-  --bg:       #f4f8f7;
-  --surface:  #ffffff;
-  --surface-2:#f4f8f7;
-  --border:   #e3e9e7;
-  --border-2: #eef2f0;
+  --success: #2a7d4f;
+  --warn:    #b36a00;
+  --danger:  #b3261e;
+  --indigo:  #141922;
 
-  --success: #059669;
-  --warn:    #d97706;
-  --danger:  #dc2626;
+  --hard:    4px 4px 0 var(--tint);
+  --sh:      3px 3px 0 var(--tint);
+  --sh-md:   4px 4px 0 var(--tint);
 
-  --sh:    0 1px 3px rgba(15,26,26,.06), 0 1px 2px rgba(15,26,26,.04);
-  --sh-md: 0 4px 16px rgba(15,26,26,.08);
-
-  --brand: #369996;
+  --brand: #2f8f8b; --teal: #2f8f8b; --teal-ink: #1f6360; --teal-soft: #b0d6d4; --teal-softer: #f4faf9;
+  --tint: #dff0ef; --dotrgb: 47,143,139; --on-accent: #ffffff;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 html, body { height: 100%; }
 
 body {
-  font-family: var(--font-inter, 'Inter', -apple-system, BlinkMacSystemFont, sans-serif);
+  font-family: var(--font-sans, 'IBM Plex Sans'), system-ui, sans-serif;
   font-size: 14px;
   color: var(--ink);
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: radial-gradient(rgba(var(--dotrgb), .16) 1px, transparent 1.2px);
+  background-size: 22px 22px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "ss01","cv11";
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+h1, h2, h3 { font-family: var(--font-display, 'Space Grotesk'), sans-serif; letter-spacing: -.02em; }
+
+/* Sharp edges everywhere: the Tailwind radius utilities in existing components all resolve to square. */
+.rounded, .rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-full,
+.rounded-t-lg, .rounded-b-lg, .rounded-br-sm, input, textarea, select, button { border-radius: 0 !important; }
+.shadow, .shadow-sm, .shadow-md, .shadow-lg { box-shadow: var(--sh-md) !important; }
+
+/* Primary buttons and focus */
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.hard-btn { background: var(--brand); color: var(--on-accent); border: 2px solid var(--ink) !important; box-shadow: 4px 4px 0 var(--ink); font-weight: 600; transition: transform .12s, box-shadow .12s; }
+.hard-btn:hover:not(:disabled) { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 var(--ink); }
+.hard-btn:active:not(:disabled) { transform: translate(3px,3px); box-shadow: 1px 1px 0 var(--ink); }
+.hard-btn:disabled { opacity: .45; cursor: not-allowed; }
+.hard-card { background: var(--surface); border: 2px solid var(--ink); box-shadow: 5px 5px 0 var(--tint); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #c8d9d6; }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

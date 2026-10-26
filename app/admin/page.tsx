@@ -60,4 +60,4 @@ export default async function AdminPage({ searchParams }: Props) {
   )
 }
 
-export const metadata = { title: 'Admin — Enterprise Assistant' }
+export const metadata = { title: 'Admin' }

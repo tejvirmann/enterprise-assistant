@@ -51,5 +51,5 @@ export async function generateMetadata({ params }: Props) {
   const { company: slug } = await params
   const companies = await sql`SELECT name FROM companies WHERE id = ${slug}`
   const name = companies[0]?.name ?? slug
-  return { title: `${name} — Enterprise Assistant` }
+  return { title: name }
 }

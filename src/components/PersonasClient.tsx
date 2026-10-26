@@ -204,9 +204,9 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
   void useCallback
 
   return (
-    <div className="flex h-full" style={{ background: 'var(--bg)' }}>
+    <div className="flex h-full max-md:flex-col max-md:overflow-y-auto" style={{ background: 'var(--bg)' }}>
       {/* Sidebar */}
-      <aside className="flex flex-col border-r flex-shrink-0" style={{ width: 240, background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <aside className="flex flex-col border-r flex-shrink-0 w-[240px] max-md:w-full max-md:border-r-0 max-md:border-b-2 max-md:max-h-[38vh] max-md:overflow-y-auto" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
           <span className="text-[10px] font-medium tracking-[.14em] uppercase" style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--ink-4)' }}>Personas</span>
           <button onClick={() => setShowNewPersona((v) => !v)}
@@ -278,19 +278,19 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
       </aside>
 
       {/* Main */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 min-w-0 overflow-hidden flex flex-col max-md:overflow-visible">
         {!activePersona ? (
           <div className="flex items-center justify-center h-full" style={{ color: 'var(--ink-4)' }}>
             <p className="text-sm">Select a persona or create a new one.</p>
           </div>
         ) : view === 'picker' ? (
-          <div className="flex flex-col h-full">
-            <div className="bg-white border-b px-8 py-4 flex items-center gap-4 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex flex-col h-full max-md:h-auto">
+            <div className="bg-white border-b px-8 max-md:px-4 py-4 flex items-center gap-4 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setView('detail')} className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>← Back</button>
               <h2 className="text-[15px] font-semibold" style={{ color: 'var(--indigo)' }}>Add Modules — {activePersona.name}</h2>
             </div>
-            <div className="flex flex-1 overflow-hidden">
-              <div className="border-r overflow-y-auto flex-shrink-0" style={{ width: 220, borderColor: 'var(--border)', background: 'var(--surface)' }}>
+            <div className="flex flex-1 overflow-hidden max-md:flex-col max-md:overflow-visible">
+              <div className="border-r overflow-y-auto flex-shrink-0 w-[220px] max-md:w-full max-md:border-r-0 max-md:max-h-[30vh]" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
                 {repos.length === 0 && <p className="px-5 py-4 text-xs" style={{ color: 'var(--ink-4)' }}>No repos. Add one in Marketplace.</p>}
                 {repos.map((r) => (
                   <div key={r.id} onClick={() => setPickerRepoId(r.id)}
@@ -338,12 +338,12 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
             </div>
           </div>
         ) : view === 'manual' ? (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <div className="bg-white border-b px-8 py-4 flex items-center gap-4 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex flex-col h-full overflow-y-auto max-md:h-auto max-md:overflow-visible">
+            <div className="bg-white border-b px-8 max-md:px-4 py-4 flex items-center gap-4 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setView('detail')} className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--ink-3)' }}>← Back</button>
               <h2 className="text-[15px] font-semibold" style={{ color: 'var(--indigo)' }}>Custom Module — {activePersona.name}</h2>
             </div>
-            <div className="px-8 py-6 max-w-2xl">
+            <div className="px-8 max-md:px-4 py-6 max-w-2xl">
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <input value={nmName} onChange={(e) => setNmName(e.target.value)} placeholder="Name *"
                   className="text-sm px-3 py-2 rounded-lg border outline-none col-span-2" style={{ borderColor: 'var(--border)', color: 'var(--ink)' }} />
@@ -370,9 +370,9 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
             </div>
           </div>
         ) : (
-          <div className="flex flex-col h-full">
-            <div className="bg-white border-b px-8 py-5 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex items-start justify-between">
+          <div className="flex flex-col h-full max-md:h-auto">
+            <div className="bg-white border-b px-8 max-md:px-4 py-5 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-start justify-between max-md:flex-col max-md:gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--indigo)' }}>{activePersona.name}</h2>
@@ -384,7 +384,7 @@ export function PersonasClient({ company, personas: initial, modules: initialMod
                   </div>
                   {activePersona.description && <p className="text-sm mt-1" style={{ color: 'var(--ink-3)' }}>{activePersona.description}</p>}
                 </div>
-                <div className="flex gap-2 mt-1 flex-shrink-0">
+                <div className="flex gap-2 mt-1 flex-shrink-0 max-md:flex-wrap">
                   {repos.length > 0 && (
                     <button onClick={() => setView('picker')} className="text-xs px-4 py-2 rounded-full font-semibold text-white" style={{ background: 'var(--teal)' }}>
                       + Add from Repo

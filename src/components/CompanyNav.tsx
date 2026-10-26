@@ -15,7 +15,6 @@ interface Props {
 const TABS = [
   { label: 'Marketplace',  href: (slug: string) => `/${slug}/marketplace` },
   { label: 'Personas',     href: (slug: string) => `/${slug}/personas` },
-  { label: 'Sample Data',  href: (slug: string) => `/${slug}/sample-data` },
   { label: 'Session',      href: (slug: string) => `/${slug}` },
 ]
 
@@ -51,25 +50,25 @@ function NavInner({ slug, name, tagline = 'by MadStack', logoUrl }: Props) {
 
   return (
     <header
-      className="flex items-center gap-7 px-5 flex-shrink-0 relative z-20"
+      className="flex items-center gap-7 max-md:gap-3 px-5 max-md:px-3 flex-shrink-0 relative z-20"
       style={{ background: 'var(--surface)', height: 56, borderBottom: '2px solid var(--ink)' }}
     >
       <div className="flex items-center gap-3 flex-shrink-0">
         <Mark name={name} logoUrl={logoUrl} />
-        <div className="flex flex-col leading-tight">
+        <div className="flex flex-col leading-tight max-md:hidden">
           <span className="text-[15px] font-semibold" style={{ fontFamily: 'var(--font-display)', letterSpacing: '-.01em' }}>{name}</span>
           <span className="text-[10px] font-medium tracking-[.1em] uppercase" style={{ ...MONO, color: 'var(--ink-3)' }}>{tagline}</span>
         </div>
       </div>
 
-      <nav className="flex h-full">
+      <nav className="flex h-full min-w-0 overflow-x-auto no-scrollbar">
         {TABS.map((tab) => {
           const active = isActive(tab.href(slug))
           return (
             <Link
               key={tab.label}
               href={tab.href(slug) + keyParam}
-              className="flex items-center px-4 text-[14px] font-medium transition-colors"
+              className="flex items-center px-4 max-md:px-2 text-[14px] max-md:text-[13px] font-medium whitespace-nowrap transition-colors"
               style={{
                 color: active ? 'var(--ink)' : 'var(--ink-3)',
                 borderBottom: `3px solid ${active ? 'var(--brand)' : 'transparent'}`,
@@ -82,7 +81,7 @@ function NavInner({ slug, name, tagline = 'by MadStack', logoUrl }: Props) {
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-3 max-md:hidden">
         {isAdmin && (
           <span className="text-[10.5px] font-medium tracking-[.1em] uppercase px-2.5 py-1" style={{ ...MONO, background: '#fff3c4', border: '1.5px solid var(--ink)' }}>
             Admin

@@ -222,14 +222,14 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-8 py-6 space-y-6 max-w-4xl mx-auto w-full"
+        className="flex-1 overflow-y-auto px-8 max-md:px-3 py-6 max-md:pt-14 space-y-6 max-w-4xl mx-auto w-full"
       >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-5 pb-12">
             <p className="text-sm" style={{ color: 'var(--ink-4)' }}>
               {welcomeMessage ?? 'Agent is ready. Try a prompt or type your own.'}
             </p>
-            <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
+            <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-2 w-full max-w-lg">
               {activeSuggestions.map((s) => (
                 <button
                   key={s}
@@ -251,7 +251,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             return (
               <div key={m.id} className="flex justify-end">
                 <div
-                  className="max-w-[72%] px-4 py-2.5 text-sm"
+                  className="max-w-[72%] max-md:max-w-[88%] px-4 py-2.5 text-sm"
                   style={{ background: 'var(--ink)', color: '#fff', boxShadow: 'var(--hard)' }}
                 >
                   {m.content}
@@ -335,12 +335,12 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
 
       {/* Input bar */}
       <div
-        className="flex-shrink-0 px-8 py-4 max-w-4xl mx-auto w-full"
+        className="flex-shrink-0 px-8 max-md:px-3 py-4 max-md:py-3 max-w-4xl mx-auto w-full"
       >
         <form onSubmit={onSubmit} className="flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--surface)', border: '2px solid var(--ink)', boxShadow: '4px 4px 0 var(--tint)' }}>
           <span
             className="text-sm font-semibold flex-shrink-0 select-none"
-            style={{ color: brandColor, fontFamily: 'var(--font-mono, monospace)' }}
+            style={{ color: 'var(--brand)', fontFamily: 'var(--font-mono, monospace)' }}
           >
             &gt;
           </span>
@@ -349,7 +349,7 @@ export function Chat({ companySlug, brandColor, activeToolIds, activeModuleIds, 
             onChange={handleInputChange}
             placeholder={isLoading ? 'Type to steer, or ESC to stop…' : 'Ask about your data…'}
             className="flex-1 bg-transparent text-sm outline-none"
-            style={{ color: 'var(--ink)', caretColor: brandColor }}
+            style={{ color: 'var(--ink)', caretColor: 'var(--brand)' }}
           />
           {isLoading ? (
             <button

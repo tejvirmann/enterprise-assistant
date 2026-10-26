@@ -69,8 +69,8 @@ export function ConfigPanel({
 
   return (
     <aside
-      className="flex flex-col flex-shrink-0 border-r overflow-hidden"
-      style={{ width: 344, background: 'var(--surface)', borderRight: '2px solid var(--ink)' }}
+      className="ea-side flex flex-col flex-shrink-0 border-r overflow-hidden"
+      style={{ background: 'var(--surface)', borderRight: '2px solid var(--ink)' }}
     >
       {/* Persona header */}
       <div

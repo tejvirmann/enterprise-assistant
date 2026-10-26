@@ -7,8 +7,12 @@ const mono = IBM_Plex_Mono({ subsets: ['latin'], variable: '--font-mono', weight
 const display = Space_Grotesk({ subsets: ['latin'], variable: '--font-display', weight: ['500', '600', '700'] })
 
 export const metadata: Metadata = {
-  title: 'Enterprise Assistant',
-  description: 'Context-configurable AI agent studio',
+  title: { default: 'Enterprise Assistant | MadStack', template: '%s | Enterprise Assistant' },
+  description: 'A context-configurable AI agent studio by MadStack: agents with access to your team’s tools and knowledge.',
+  applicationName: 'Enterprise Assistant',
+  authors: [{ name: 'MadStack', url: 'https://madstack.ai' }],
+  // Each company environment is a private demo, so keep it out of search results.
+  robots: { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

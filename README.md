@@ -112,11 +112,32 @@ Three tabs above the session:
 - **Custom Modules** — author a module directly in the UI with a Markdown textarea
 
 ### Branding
-- Each company has a `color` (hex) and optional `brand_config` JSONB that drives all CSS variables
-- Override specific CSS vars: `bg`, `surface`, `border`, `teal_ink`
-- `logo_url` in `brand_config` shows a logo mark in the nav header
+- One accent color per company drives the whole UI (sharp edges, hard shadows, tints). Neutrals are fixed so every company looks consistent
+- Each company has a `color` (hex) and optional `brand_config` JSONB. Derived tokens (`--brand`, `--teal-ink`, `--tint`, `--dotrgb`, `--on-accent`) come from `src/lib/theme.ts`
+- `bg`, `surface` and `border` in `brand_config` are ignored since the redesign; `teal_ink` can still override the dark accent
+- `logo_url` in `brand_config` shows a logo mark in the nav header; without one the nav shows the company initial in a brand-color square, and the tab icon is generated the same way (`app/[company]/icon.tsx`)
 - `tagline`, `chat_welcome` customize the nav subtitle and agent greeting
 - Zero code changes to white-label a new company — it's all DB rows
+
+#### Brand colors in use
+
+| Where | Color | Hex | Source |
+| --- | --- | --- | --- |
+| Default (demo company `demo`, admin, 404, fallback tab icon) | Orange | `#f97316` | `ORIGINAL_BRAND` in `src/lib/brand.ts`, overridable with `BRAND_COLOR` |
+| Default, MadStack red option | Red | `#b41504` | set `BRAND_COLOR=#b41504` (matches madstack.ai) |
+| `findorff` | Blue | `#2563eb` | `companies.color` |
+| `osce` | Blue | `#2563eb` | `companies.color` |
+| `lattice` | Indigo | `#212154` | `companies.color` |
+| `lancaster-investments` | Green | `#166534` | `companies.color` |
+
+Switch the default accent in `.env.local` (restart the dev server after changing it):
+
+```env
+BRAND_COLOR=#f97316   # orange, the original default
+# BRAND_COLOR=#b41504 # MadStack red
+```
+
+`BRAND_COLOR` only affects the `demo` company and pages that are not tied to a company. Every other company keeps the color stored on its row. When you add or change a company color, update the table above.
 
 ---
 
@@ -260,9 +281,6 @@ chat_messages (
   "logo_url":    "/madstack-icon.svg",
   "tagline":     "by MadStack",
   "chat_welcome": "AgentOS ready. What would you like to explore?",
-  "bg":          "#fff7ed",
-  "surface":     "#ffffff",
-  "border":      "rgba(249,115,22,0.18)",
   "teal_ink":    "#c2410c"
 }
 ```
@@ -382,6 +400,7 @@ OPENROUTER_MODEL=deepseek/deepseek-r1-0528   # or anthropic/claude-sonnet-4-5
 
 DATABASE_URL=postgresql://...   # Neon (auto-injected by Vercel integration)
 GITHUB_TOKEN=ghp_...            # Optional — for private context repos
+BRAND_COLOR=#f97316             # Optional — default accent (orange); #b41504 for MadStack red
 ```
 
 ---

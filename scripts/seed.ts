@@ -6,6 +6,8 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 import { neon } from '@neondatabase/serverless'
+import { activate as activateIndustryDemos, stage as stageIndustryDemos } from './industry-demos'
+import { DEMO_BASE_CONTEXT, DEMO_BRAND, DEMO_DESCRIPTION, DEMO_MODULES, DEMO_TOOLS } from './demo-config'
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -601,23 +603,6 @@ Present a structured investigation summary:
 
 // ── Demo (root default) ──────────────────────────────────────────────────────
 
-const DEMO_BASE_CONTEXT = `You are AgentOS — a context-aware enterprise AI assistant. You have access to live data tools and pre-loaded skill modules. You reason step by step, cite your sources, and present results as structured tables.
-
-## Core behavior
-- Query tools before answering data questions. Never fabricate values.
-- When a question spans multiple systems, query all relevant tools and reconcile results.
-- Flag anomalies, risks, and items requiring attention prominently.
-- Be concise in prose but complete in data.`
-
-const DEMO_SKILL_OVERVIEW = `When the user asks what tools or context you have loaded:
-
-1. List each active skill/blueprint by name and one-sentence description.
-2. List each active MCP tool server and the number of tools available.
-3. Show estimated token budget consumed vs available.
-4. Offer to demonstrate any capability with a sample query.
-
-Keep the response structured and scannable.`
-
 // ── Lattice (Biologics Manufacturing — mirrors lattice-poc exactly) ──────────
 
 const LATTICE_BASE_CONTEXT = `You are Lattice, a federated intelligence system for biologics manufacturing.
@@ -686,7 +671,6 @@ Always include an "Action Required" column: Breach | Severity | Deadline | Owner
 
 async function seedCompanies() {
   const FINDORFF_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Findorff QC Agent ready. Query LIMS and QMS data.' })
-  const DEMO_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'AgentOS ready. What would you like to explore?', logo_url: '/madstack-icon.svg' })
   const LATTICE_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lattice ready. Query LIMS, QMS, and Rosetta.' })
   const LANCASTER_BRAND = JSON.stringify({ tagline: 'by MadStack', chat_welcome: 'Lancaster Portfolio Intelligence ready.', bg: '#f0fdf4', surface: '#ffffff', border: '#bbf7d0' })
 
@@ -695,9 +679,9 @@ async function seedCompanies() {
     INSERT INTO companies (id, name, description, color, brand_config, base_context, default_persona_id, admin_key) VALUES
     (
       'findorff',
-      'Findorff',
+      'Findorff Demo',
       'Biologics manufacturing — LIMS, QMS, and Rosetta cross-system intelligence',
-      '#2563eb',
+      '#f01d1d',
       ${FINDORFF_BRAND}::jsonb,
       ${BASE_CONTEXT},
       NULL,
@@ -790,27 +774,18 @@ async function seedCompanies() {
   // ── Demo company (root default) ──────────────────────────────────────────
   await sql`
     INSERT INTO companies (id, name, description, color, brand_config, base_context, admin_key) VALUES
-    ('demo', 'AgentOS', 'General-purpose enterprise AI assistant demo', '#f97316', ${DEMO_BRAND}::jsonb, ${DEMO_BASE_CONTEXT}, 'demo-admin')
+    ('demo', 'AgentOS', ${DEMO_DESCRIPTION}, '#f97316', ${DEMO_BRAND}::jsonb, ${DEMO_BASE_CONTEXT}, 'demo-admin')
   `
   await sql`
     INSERT INTO personas (id, company_id, name, description) VALUES
-    ('demo-default', 'demo', 'Enterprise Assistant', 'General-purpose analyst with access to all available tools and context')
+    ('demo-default', 'demo', 'Enterprise Assistant', 'Blank-slate assistant: uses whatever skills and tools are loaded in the session')
   `
   await sql`UPDATE companies SET default_persona_id = 'demo-default' WHERE id = 'demo'`
-  await sql`
-    INSERT INTO persona_modules (persona_id, type, name, description, tokens, enabled, content) VALUES
-    ('demo-default', 'skill', 'Capability Overview', 'How to summarize loaded skills, tools, and context', 150, true, ${DEMO_SKILL_OVERVIEW}),
-    ('demo-default', 'skill', 'LIMS Analysis', 'Analytical result querying, OOS trend detection, cross-batch comparisons', 400, true, ${LIMS_SKILL_CONTENT}),
-    ('demo-default', 'skill', 'QMS Investigation', 'Deviation tracking, CAPA status, batch release, audit findings', 450, true, ${QMS_SKILL_CONTENT})
-  `
-  for (const toolId of [
-    'lims_list_compounds', 'lims_search_samples', 'lims_get_assay_results',
-    'lims_get_oos_results', 'lims_get_instrument_status', 'lims_compare_compound_results',
-    'qms_list_products', 'qms_get_batch', 'qms_list_batches', 'qms_get_deviations',
-    'qms_get_open_capas', 'qms_get_specifications', 'qms_check_batch_release', 'qms_get_audit_findings',
-    'rosetta_normalize_term', 'rosetta_convert_units', 'rosetta_resolve_compound',
-    'rosetta_list_term_mappings', 'rosetta_standardize_status',
-  ]) {
+  for (const m of DEMO_MODULES) {
+    await sql`INSERT INTO persona_modules (persona_id, repo_id, path, type, name, description, tokens, enabled, content)
+              VALUES ('demo-default', 'local', ${m.path}, ${m.type}, ${m.name}, ${m.description}, ${m.tokens}, true, ${m.content})`
+  }
+  for (const toolId of DEMO_TOOLS) {
     await sql`INSERT INTO company_tools (company_id, tool_id, enabled) VALUES ('demo', ${toolId}, true)`
   }
 
@@ -875,14 +850,33 @@ async function seedCompanies() {
 // Main
 // ---------------------------------------------------------------------------
 
+const SEEDED_COMPANIES = ['findorff', 'demo', 'lattice', 'lancaster-investments']
+
+// The seed TRUNCATEs every table. The live database also holds companies that are not seeded here
+// (for example `osce`), so refuse to run if it finds any, unless --force is passed.
+async function guardAgainstWipingLiveData() {
+  const rows = (await sql`SELECT id FROM companies`.catch(() => [])) as { id: string }[]
+  const extra = rows.map(r => r.id).filter(id => !SEEDED_COMPANIES.includes(id))
+  if (extra.length && !process.argv.includes('--force')) {
+    console.error(`Refusing to seed: this database has companies the seed does not know about (${extra.join(', ')}).`)
+    console.error('Seeding would delete them. To change only the demo studio, run: npm run db:migrate-demos')
+    console.error('To wipe everything anyway, re-run with --force.')
+    process.exit(1)
+  }
+}
+
 async function main() {
   console.log('Seeding enterprise-assistant database...')
+  await guardAgainstWipingLiveData()
   await createTables()
   await clearData()
   await seedLims()
   await seedQms()
   await seedRosetta()
   await seedCompanies()
+  // Findorff Demo (construction) and Lancaster (investments) get their own data, tools and skills.
+  await stageIndustryDemos(sql)
+  await activateIndustryDemos(sql)
   console.log('Done.')
 }
 

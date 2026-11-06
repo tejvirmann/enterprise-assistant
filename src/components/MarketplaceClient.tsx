@@ -7,7 +7,12 @@ import type { Company, Repo, RepoModule, McpServer } from '@/lib/types'
 const SYSTEM_META: Record<string, { label: string; description: string; owner: string }> = {
   lims:    { label: 'LIMS',    description: 'Lab Information Management — samples, assays, OOS, instruments', owner: 'MadStack' },
   qms:     { label: 'QMS',     description: 'Quality Management — batches, deviations, CAPAs, specifications', owner: 'MadStack' },
-  rosetta: { label: 'Rosetta', description: 'Data Normalization — term mappings, unit conversions, compound aliases', owner: 'MadStack' },
+  rosetta: { label: 'Rosetta', description: 'Data Normalization — term mappings, unit conversions, compound aliases', owner: 'MadStack' },  proj:    { label: 'Project Controls', description: 'Construction project controls — projects, RFIs, submittals, change orders, schedule, cost', owner: 'MadStack' },
+  safety:  { label: 'Safety', description: 'Jobsite safety — incidents, near misses, corrective actions', owner: 'MadStack' },
+  port:    { label: 'Portfolio', description: 'Portfolio data — holdings, performance, attribution, liquidity', owner: 'MadStack' },
+  risk:    { label: 'Risk', description: 'Risk analytics — volatility, VaR, drawdown, concentration', owner: 'MadStack' },
+  ips:     { label: 'Compliance (IPS)', description: 'Investment policy — limit checks, restricted list, upcoming dates', owner: 'MadStack' },
+  demo:    { label: 'Demo Guide', description: 'Demo directory — what demos exist, and the skills, tools and MCP servers in each', owner: 'MadStack' },
 }
 
 const TYPE_COLORS: Record<string, string> = {

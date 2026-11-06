@@ -27,3 +27,4 @@ v3/
 mockups/*
 !mockups/final/
 *.tsbuildinfo
+scripts/backups/

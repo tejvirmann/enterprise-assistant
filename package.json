@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:seed": "npx tsx scripts/seed.ts"
+    "db:seed": "npx tsx scripts/seed.ts",
+    "db:migrate-demos": "npx tsx scripts/migrate-demos.ts",
+    "db:migrate-industry": "npx tsx scripts/migrate-industry-demos.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",

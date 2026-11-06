@@ -6,6 +6,12 @@ const SYSTEM_META: Record<string, { label: string; description: string }> = {
   lims:    { label: 'LIMS',    description: 'Lab Information Management' },
   qms:     { label: 'QMS',     description: 'Quality Management System' },
   rosetta: { label: 'Rosetta', description: 'Data Normalization & Translation' },
+  proj:    { label: 'Project Controls', description: 'Projects, RFIs, submittals, change orders, schedule, cost' },
+  safety:  { label: 'Safety',  description: 'Jobsite incidents and corrective actions' },
+  port:    { label: 'Portfolio', description: 'Holdings, performance, attribution, liquidity' },
+  risk:    { label: 'Risk',    description: 'Volatility, VaR, drawdown, concentration' },
+  ips:     { label: 'Compliance (IPS)', description: 'Policy limits, restricted list, upcoming dates' },
+  demo:    { label: 'Demo Guide', description: 'What demos exist and what each contains' },
 }
 
 
